@@ -3,8 +3,6 @@
 # Copyright 凡派 All Rights Reserved.
 #
 # Apache-2.0
-#
-# v1.1.0
 
 # docker-compose网络的名称
 NETWORK=fabric-ca
@@ -75,8 +73,15 @@ CONFIG_BLOCK_FILE=/tmp/config_block.pb
 # 配置更新交易文件
 CONFIG_UPDATE_ENVELOPE_FILE=/tmp/config_update_as_envelope.pb
 
-# 删除所有fabric相关的容器和链码镜像
-function removeContainersAndImages {
+# current version of fabric images released
+export VERSION=1.1.0
+# current version of fabric-ca images released
+export CA_VERSION=$VERSION
+# current version of thirdparty images (couchdb, kafka and zookeeper) released
+export THIRDPARTY_IMAGE_VERSION=0.4.6
+
+# 删除所有fabric相关的容器
+function removeFabricContainers {
 
     # 删除fabric容器（其镜像名称包含hyperledger的）
     dockerContainers=$(docker ps -a | awk '$2~/hyperledger/ {print $1}')
@@ -84,6 +89,11 @@ function removeContainersAndImages {
         log "Deleting existing docker containers ..."
         docker rm -f $dockerContainers > /dev/null
     fi
+
+}
+
+# 删除链码容器和镜像
+function removeChaincode {
 
     # 删除链码容器
     chaincodeContainers=$(docker ps -a | awk '$2~/dev-peer/ {print $1}')

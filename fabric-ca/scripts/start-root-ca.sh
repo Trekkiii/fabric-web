@@ -3,8 +3,6 @@
 # Copyright 凡派 All Rights Reserved.
 #
 # Apache-2.0
-#
-# v1.1.0
 
 set -e
 

@@ -4,8 +4,6 @@
 #
 # Apache-2.0
 #
-# v1.1.0
-#
 # 该脚本构造运行fabric所需的docker-compose.yaml文件
 
 SDIR=$(dirname "$0")

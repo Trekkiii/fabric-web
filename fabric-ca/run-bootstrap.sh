@@ -27,14 +27,8 @@ for ORG in $ORGS; do
     fetchCAChainfile $ORG $CA_CHAINFILE
 done
 
-#################################################
-# 删除所有fabric相关的容器和链码镜像
-removeContainersAndImages
-# 删除原有的docker-compose.yml
-if [ -f ${SDIR}/docker-compose.yml ]; then
-    rm -rf ${SDIR}/docker-compose.yml
-fi
-#################################################
+# 删除所有fabric相关的容器
+removeFabricContainers
 
 # 创建docker-compose.yml文件
 ${SDIR}/makeDocker.sh

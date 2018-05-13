@@ -187,13 +187,11 @@ SDIR=$(dirname "$0")
 source ${SDIR}/scripts/env.sh
 cd ${SDIR}
 
-#################################################
 # 删除原有的configtx.yaml
 if [ -f ${SDIR}/configtx.yaml ]; then
     rm -rf ${SDIR}/configtx.yaml
 fi
 # 刷新DATA区域
 refreshData
-#################################################
 
 main

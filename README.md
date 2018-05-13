@@ -2,20 +2,31 @@
 
 ## 使用步骤
 
+请使用如下命令为脚本增加执行权限：
+
+```bash
+root@vm10-249-0-4:~/fabric-web/fabric-ca# chmod +x *.sh
+root@vm10-249-0-4:~/fabric-web/fabric-ca# 
+root@vm10-249-0-4:~/fabric-web/fabric-ca# 
+root@vm10-249-0-4:~/fabric-web/fabric-ca# chmod +x scripts/*.sh
+```
+
 ### 1.构建项目，为不同节点打包脚本
 
 ```bash
 ./network_builder.sh
 ```
 
-确保下列步骤被正确执行：
+再正式开始前，确保你已经正确完成下列步骤执行：
 
-- 将`build`目录下生成的文件分别拷贝到相应的节点
+- 将`build`目录下生成的文件分别拷贝到相应节点的***`fabric.config`配置中指定的用户***目录下，并且将其所有者设置为***`fabric.config`配置中指定的用户***
 
-- 在每个节点中，将`host.config`文件中的内容追加到`host`
+- 将`host.config`文件中的内容追加到每个节点的`host`
 
-- 在每个节点下载fabric镜像
+- 每个节点都已下载所需的fabric镜像
 
+    可执行如下命令下载镜像
+    
     ```bash
     ./down-images.sh
     ```
@@ -85,11 +96,10 @@ setup容器用于向中间层fabric-ca-servers注册Orderer和Peer身份
 ### 4. 启动orderer
 
 ```text
-orderer-bootstrap.sh [-h] [-?] [-n] <ORG> <NUM>
+orderer-bootstrap.sh [-h] [-?] <ORG> <NUM>
     -h|-?  - 获取此帮助信息
-    -n  - 不清理fabric相关的容器和镜像、docker-compose.yml
-    <ORG>   - 要启动的orderer组织名称
-    <NUM>   - 要启动的orderer组织的第几个节点
+    <ORG>   - 启动的orderer组织名称
+    <NUM>   - 启动的orderer组织的第几个节点
 ```
 
 ```bash
@@ -99,11 +109,10 @@ orderer-bootstrap.sh [-h] [-?] [-n] <ORG> <NUM>
 ### 5. 启动peer
 
 ```text
-peer-bootstrap.sh [-h] [-?] [-n] <ORG> <NUM>
+peer-bootstrap.sh [-h] [-?] <ORG> <NUM>
     -h|-?  - 获取此帮助信息
-    -n  - 不清理fabric相关的容器和镜像、docker-compose.yml
-    <ORG>   - 要启动的peer组织的名称
-    <NUM>   - 要启动的peer组织的节点索引
+    <ORG>   - 启动的peer组织的名称
+    <NUM>   - 启动的peer组织的节点索引
 ```
 
 ```bash
@@ -118,7 +127,7 @@ peer-bootstrap.sh [-h] [-?] [-n] <ORG> <NUM>
 
 ## TODO
 
-- 每个节点应该限制只删除与自身相关的容器和镜像；
+- 每个节点执行`down-images.sh`脚本，只下载该节点必须的fabric镜像
 
 ## FAQ
 

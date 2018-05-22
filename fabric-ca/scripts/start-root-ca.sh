@@ -4,7 +4,21 @@
 #
 # Apache-2.0
 
+function finish {
+
+    if [ "$done" = true ]; then
+        log "See $ROOT_CA_LOGFILE for more details"
+        touch /$ROOT_CA_SUCCESS_FILE
+    else
+        log "Tests did not complete successfully; see $ROOT_CA_LOGFILE for more details"
+        touch /$ROOT_CA_FAIL_FILE
+    fi
+}
+
 set -e
+
+done=false # 标记是否执行完成所有以下操作
+trap finish EXIT
 
 # 初始化根CA
 # -b 指定root CA服务启动的用户名和密码，这里使用root CA管理员
@@ -19,16 +33,18 @@ cp $FABRIC_CA_SERVER_HOME/ca-cert.pem $TARGET_CERTFILE
 # 添加组织结构配置
 # FABRIC_ORGS="$ORDERER_ORGS $PEER_ORGS"
 for o in $FABRIC_ORGS; do
-   aff=$aff"\n    $o: []"
+   aff=$aff"\n   $o: []"
 done
-aff="${aff#\\n    }" # 注意对\n转义
+aff="${aff#\\n   }" # 注意对\n转义
 
 # sed
 #   -i:直接修改读取的文件内容，而不是输出到终端
 #   a:新增，a的后面可以接字串，而这些字串会在新的一行出现
 #   \\ 输出其后的空格，否则会被忽略
-sed -i "/affiliations:/a \\    $aff" \
+sed -i "/affiliations:/a \\   $aff" \
    $FABRIC_CA_SERVER_HOME/fabric-ca-server-config.yaml
 
 # Start the root CA
 fabric-ca-server start
+
+done=true

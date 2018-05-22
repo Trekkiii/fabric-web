@@ -11,9 +11,9 @@ function printHelp {
 cat << EOF
     使用方法:
         orderer-bootstrap.sh [-h] [-?] <ORG> <NUM>
-            -h|-?  - 获取此帮助信息
-            <ORG>   - 启动的orderer组织的名称
-            <NUM>   - 启动的orderer组织的节点索引
+            -h|-?       获取此帮助信息
+            <ORG>       启动的orderer组织的名称
+            <NUM>       启动的orderer组织的节点索引
 EOF
 
 }
@@ -48,17 +48,43 @@ SDIR=$(dirname "$0")
 source ${SDIR}/scripts/env.sh
 cd ${SDIR}
 
-initOrgVars $ORG
-# 从远程CA服务端获取CA_CHAINFILE
-# fetchCAChainfile <ORG> <CA_CHAINFILE>
-fetchCAChainfile $ORG $CA_CHAINFILE
+initOrdererVars $ORG $NUM
 
-# 删除所有fabric相关的容器
-removeFabricContainers
+# 删除orderer容器
+removeFabricContainers $ORDERER_NAME
+# 刷新DATA区域
+refreshData
+
+# 从远程CA服务端获取CAChain证书
+# fetchCAChain <org> <ca_chainfile> [<is_root_ca_certfile>]
+fetchCAChain $ORG $CA_CHAINFILE
+# 从'setup'节点获取创世区块
+fetchChannelTx ${GENESIS_BLOCK_FILE}
+# 从'setup'节点获取组织的MSP
+fetchOrgMSP $ORG
 
 # 创建docker-compose.yml文件
 ${SDIR}/makeDocker.sh
 
 # 创建orderer docker容器
-log "Creating docker containers orderer${NUM}-${ORG} ..."
-docker-compose up -d --no-deps orderer${NUM}-${ORG}
+log "Creating docker containers $ORDERER_NAME ..."
+docker-compose up -d --no-deps $ORDERER_NAME
+
+# 等待'orderer'容器启动，随后tail -f
+dowait "the docker 'orderer' container to start" 60 ${SDIR}/${ORDERER_LOGFILE} ${SDIR}/${ORDERER_LOGFILE}
+
+tail -f ${SDIR}/${ORDERER_LOGFILE}&
+TAIL_PID=$!
+sleep 5
+# 等待'orderer'容器执行完成
+while true; do
+    if [ -f ${SDIR}/${ORDERER_SUCCESS_FILE} ]; then
+        kill -9 $TAIL_PID
+        exit 0
+    elif [ -f ${SDIR}/${ORDERER_FAIL_FILE} ]; then
+        kill -9 $TAIL_PID
+        exit 1
+    else
+        sleep 1
+    fi
+done

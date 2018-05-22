@@ -5,13 +5,23 @@
 # Apache-2.0
 #
 
+function finish {
+
+    if [ "$done" = true ]; then
+        log "See $ORDERER_LOGFILE for more details"
+        touch /$ORDERER_SUCCESS_FILE
+    else
+        log "Tests did not complete successfully; see $ORDERER_LOGFILE for more details"
+        touch /$ORDERER_FAIL_FILE
+    fi
+}
+
 set -e
 
-source $(dirname "$0")/env.sh
+done=false # 标记是否执行完成所有以下操作
+trap finish EXIT
 
-# 为orderer节点向CA服务端申请根证书，并保存到/${DATA}/orgs/${ORG}/msp
-# 如果ADMINCERTS为true，我们需要登记组织管理员并将证书保存到/${DATA}/orgs/${ORG}/msp/admincerts
-getCACerts $ORG
+source $(dirname "$0")/env.sh
 
 # 登记并获取orderer节点的tls证书
 # 使用orderer节点身份登记，以获取orderer的TLS证书(使用 "tls" profile)，并保存在/tmp/tls目录（以便将证书和私钥重命名为server.crt、server.key）下
@@ -38,3 +48,5 @@ dowait "genesis block to be created" 60 $SETUP_LOGFILE $ORDERER_GENERAL_GENESISF
 # 启动orderer
 env | grep ORDERER
 orderer
+
+done=true

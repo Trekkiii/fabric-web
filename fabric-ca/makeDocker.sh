@@ -5,16 +5,8 @@
 # Apache-2.0
 #
 # 该脚本构造运行fabric所需的docker-compose.yaml文件
-
-SDIR=$(dirname "$0")
-source $SDIR/scripts/env.sh
-
-# TODO networks 是否需要取消设置？
 function writeHeader {
    echo "version: '2'
-
-networks:
-  $NETWORK:
 
 services:
 "
@@ -40,13 +32,16 @@ function writeRootCA {
             - BOOTSTRAP_USER_PASS=$ROOT_CA_ADMIN_USER_PASS
             # 根CA的签名证书($FABRIC_CA_SERVER_HOME/ca-cert.pem)的一份copy(/${DATA}/${ORG}-ca-cert.pem)
             - TARGET_CERTFILE=$ROOT_CA_CERTFILE
+            - ROOT_CA_LOGFILE=$ROOT_CA_LOGFILE
+            # 'rca'容器容器成功和失败的日志文件
+            - ROOT_CA_SUCCESS_FILE=$ROOT_CA_SUCCESS_FILE
+            - ROOT_CA_FAIL_FILE=$ROOT_CA_FAIL_FILE
+            - ORG=$ORG
             # 用于组织结构配置：affiliation
             - FABRIC_ORGS="$ORGS"
         volumes:
             - ./scripts:/scripts
             - ./$DATA:/$DATA
-        networks:
-            - $NETWORK
         ports:
             - 7054:7054
     "
@@ -87,18 +82,23 @@ function writeIntermediateCA {
             - PARENT_URL=https://$ROOT_CA_ADMIN_USER_PASS@$ROOT_CA_HOST:7054
             # 中间层CA的证书chain($FABRIC_CA_SERVER_HOME/ca-chain.pem)的一份copy(/${DATA}/${ORG}-ca-chain.pem)
             - TARGET_CHAINFILE=$INT_CA_CHAINFILE
+            - INT_CA_LOGFILE=$INT_CA_LOGFILE
+            - INT_CA_SUCCESS_FILE=$INT_CA_SUCCESS_FILE
+            - INT_CA_FAIL_FILE=$INT_CA_FAIL_FILE
             - ORG=$ORG
             - FABRIC_ORGS="$ORGS"
         volumes:
             - ./scripts:/scripts
             - ./$DATA:/$DATA
-        networks:
-            - $NETWORK
         depends_on:
             - $ROOT_CA_NAME
         ports:
             - 7054:7054
-    "
+        extra_hosts:"
+        genCAHosts
+        genOrdererHosts
+        genPeerHosts
+        echo ""
 }
 
 # 编写服务，用于生成fabric artifacts（如，创世区块）
@@ -111,13 +111,15 @@ function writeSetupFabric {
         volumes:
             - ./scripts:/scripts
             - ./$DATA:/$DATA
-        networks:
-            - $NETWORK
         depends_on:"
         for ORG in $ORGS; do
             initOrgVars $ORG
             echo "            - $CA_NAME"
         done
+        echo "        extra_hosts:"
+        genCAHosts
+        genOrdererHosts
+        genPeerHosts
         echo ""
 }
 
@@ -181,19 +183,24 @@ function writeOrderer {
             - ORDERER_DEBUG_BROADCASTTRACEDIR=$LOGDIR
             - ORDERER_HOME=$MYHOME
             - ORDERER_HOST=$ORDERER_HOST
+            - ORDERER_LOGFILE=$ORDERER_LOGFILE
+            - ORDERER_SUCCESS_FILE=$ORDERER_SUCCESS_FILE
+            - ORDERER_FAIL_FILE=$ORDERER_FAIL_FILE
             - ORG=$ORG
             - ORG_ADMIN_CERT=$ORG_ADMIN_CERT # 组织管理员身份证书 /${DATA}/orgs/${ORG}/msp/admincerts/cert.pem
         command: /bin/bash -c '/scripts/start-orderer.sh 2>&1 | tee /$ORDERER_LOGFILE'
         volumes:
             - ./scripts:/scripts
             - ./$DATA:/$DATA
-        networks:
-            - $NETWORK
         depends_on:
             - setup
         ports:
             - 7050:7050
-    "
+        extra_hosts:"
+        genCAHosts
+        genOrdererHosts
+        genPeerHosts
+        echo ""
 }
 
 # Peer容器服务
@@ -211,11 +218,14 @@ function writePeer {
             - ENROLLMENT_URL=https://$PEER_NAME_PASS@$CA_HOST:7054
             - CORE_PEER_ID=$PEER_HOST
             - CORE_PEER_ADDRESS=$PEER_HOST:7051
+            - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:7052
             - CORE_PEER_LOCALMSPID=$ORG_MSP_ID
             - CORE_PEER_MSPCONFIGPATH=$MYHOME/msp
             - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
-            - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=net_${NETWORK}
+            - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=host
             - CORE_LOGGING_LEVEL=DEBUG
+            - CORE_CHAINCODE_DEPLOYTIMEOUT=300s
+            - CORE_CHAINCODE_STARTUPTIMEOUT=300s
             # 开启TLS时的相关配置
             - CORE_PEER_TLS_ENABLED=true
             - CORE_PEER_TLS_KEY_FILE=$MYHOME/tls/server.key # peer签名私钥
@@ -233,6 +243,9 @@ function writePeer {
             - PEER_HOME=$MYHOME
             - PEER_HOST=$PEER_HOST
             - PEER_NAME_PASS=$PEER_NAME_PASS
+            - PEER_LOGFILE=$PEER_LOGFILE
+            - PEER_SUCCESS_FILE=$PEER_SUCCESS_FILE
+            - PEER_FAIL_FILE=$PEER_FAIL_FILE
             - ORG=$ORG
             - ORG_ADMIN_CERT=$ORG_ADMIN_CERT" # 组织管理员身份证书 /${DATA}/orgs/${ORG}/msp/admincerts/cert.pem
     if [ $NUM -gt 1 ]; then
@@ -245,14 +258,17 @@ function writePeer {
             - ./scripts:/scripts
             - ./$DATA:/$DATA
             - /var/run:/host/var/run
-        networks:
-            - $NETWORK
         depends_on:
             - setup
         ports:
             - 7051:7051
+            - 7052:7052
             - 7053:7053
-    "
+        extra_hosts:"
+        genCAHosts
+        genOrdererHosts
+        genPeerHosts
+        echo ""
 }
 
 # 编写一个服务来运行fabric测试，包括创建一个通道，安装、调用和查询链码
@@ -275,8 +291,6 @@ function writeRunFabric {
             - ./$DATA:/$DATA
             - ${WEB_DIR}:/opt/gopath/src/github.com/hyperledger/fabric-web
             - ${FABRIC_DIR}:/opt/gopath/src/github.com/hyperledger/fabric
-        networks:
-            - $NETWORK
         depends_on:"
         for ORG in $ORDERER_ORGS; do
             COUNT=1
@@ -294,9 +308,51 @@ function writeRunFabric {
                 COUNT=$((COUNT+1))
             done
         done
+        echo "        extra_hosts:"
+        genCAHosts
+        genOrdererHosts
+        genPeerHosts
+        echo ""
+}
+
+function genCAHosts {
+    local ORG
+    for ORG in $ORGS; do
+        initOrgVars $ORG
+        if $USE_INTERMEDIATE_CA; then
+            echo "            - \"${INT_CA_HOST}:"$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.ICA.IP')"\""
+        fi
+        echo "            - \"${ROOT_CA_HOST}:"$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.RCA.IP')"\""
+    done
+}
+
+function genOrdererHosts {
+    local ORG
+    for ORG in $ORDERER_ORGS; do
+        local COUNT=1
+        while [[ "$COUNT" -le $NUM_ORDERERS ]]; do
+            initOrdererVars $ORG $COUNT
+            echo "            - \"${ORDERER_HOST}:"$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.ORDERERS['$((COUNT-1))'].IP')"\""
+            COUNT=$((COUNT+1))
+        done
+    done
+}
+
+function genPeerHosts {
+    local ORG
+    for ORG in $PEER_ORGS; do
+        local COUNT=1
+        while [[ "$COUNT" -le $NUM_PEERS ]]; do
+            initPeerVars $ORG $COUNT
+            echo "            - \"${PEER_HOST}:"$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.PEERS['$((COUNT-1))'].IP')"\""
+            COUNT=$((COUNT+1))
+        done
+    done
 }
 
 function main {
+
+    installJQ
 
     {
     # 编写header
@@ -324,5 +380,8 @@ function main {
     } > $SDIR/docker-compose.yml
    log "Created docker-compose.yml"
 }
+
+SDIR=$(dirname "$0")
+source $SDIR/scripts/env.sh
 
 main

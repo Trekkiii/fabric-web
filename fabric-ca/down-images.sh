@@ -12,12 +12,6 @@ SDIR=$(dirname "$0")
 source ${SDIR}/scripts/env.sh
 cd ${SDIR}
 
-MARCH=`uname -m` # Set MARCH variable i.e ppc64le,s390x,x86_64,i386
-
-: ${CA_TAG:="$MARCH-$CA_VERSION"}
-: ${FABRIC_TAG:="$MARCH-$VERSION"}
-: ${THIRDPARTY_TAG:="$MARCH-$THIRDPARTY_IMAGE_VERSION"}
-
 dockerCaPull() {
 
     local CA_TAG=$1

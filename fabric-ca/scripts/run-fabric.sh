@@ -8,153 +8,9 @@ set -e
 
 source $(dirname "$0")/env.sh
 
-# 等待所有orderers和peers节点启动
-function waitAllOrderersAndPeers {
-
-    for ORG in $ORDERER_ORGS; do
-        COUNT=1
-        while [[ "$COUNT" -le $NUM_ORDERERS ]]; do
-            initOrdererVars $ORG $COUNT
-
-            # Usage: waitPort <what> <timeoutInSecs> <errorLogFile|doc> <host> <port>
-            waitPort "Orderer orderer${NUM}-${ORG} to start" 60 $ORDERER_LOGFILE $ORDERER_HOST 7050
-
-            COUNT=$((COUNT+1))
-        done
-    done
-
-    for ORG in $PEER_ORGS; do
-        COUNT=1
-        while [[ "$COUNT" -le $NUM_PEERS ]]; do
-            initPeerVars $ORG $COUNT
-
-            # Usage: waitPort <what> <timeoutInSecs> <errorLogFile|doc> <host> <port>
-            waitPort "Peer peer${NUM}-${ORG} to start" 60 $PEER_LOGFILE $PEER_HOST 7051
-
-            COUNT=$((COUNT+1))
-        done
-    done
-}
-
-function finish {
-
-    if [ "$done" = true ]; then
-        logr "See $RUN_LOGFILE for more details"
-        touch /$RUN_SUCCESS_FILE
-    else
-        logr "Tests did not complete successfully; see $RUN_LOGFILE for more details"
-        touch /$RUN_FAIL_FILE
-    fi
-}
-
-# 切换到第一个peer组织的管理员身份，然后创建应用通道。
-function createChannel {
-
-    # 切换到第一个peer组织的管理员身份。如果之前没有登记，则登记。
-    # 这里使用initPeerVars方法对ORDERER_CONN_ARGS进行初始化，以指定keyfile私钥、certfile证书文件参数
-    initPeerVars ${PORGS[0]} 1
-    switchToAdminIdentity
-
-    logr "Creating channel '$CHANNEL_NAME' on $ORDERER_HOST ..."
-
-    peer channel create --logging-level=DEBUG -c $CHANNEL_NAME -f $CHANNEL_TX_FILE $ORDERER_CONN_ARGS
-}
-
-# 切换到peer组织的管理员身份，然后加入应用通道
-function joinChannel {
-
-    switchToAdminIdentity
-
-    set +e
-
-    local COUNT=1
-    MAX_RETRY=10
-
-    while true; do
-        logr "Peer $PEER_HOST is attempting to join channel '$CHANNEL_NAME' (attempt #${COUNT}) ..."
-        peer channel join -b $CHANNEL_NAME.block
-        if [ $? -eq 0 ]; then
-            set -e
-            logr "Peer $PEER_HOST successfully joined channel '$CHANNEL_NAME'"
-            return
-        fi
-        if [ $COUNT -gt $MAX_RETRY ]; then
-            fatalr "Peer $PEER_HOST failed to join channel '$CHANNEL_NAME' in $MAX_RETRY retries"
-        fi
-        COUNT=$((COUNT+1))
-        sleep 1
-    done
-}
-
-# 切换到peer组织的管理员身份，然后安装链码
-function installChaincode {
-
-    switchToAdminIdentity
-    logr "Installing chaincode on $PEER_HOST ..."
-    peer chaincode install -n mycc -v 1.0 -p github.com/hyperledger/fabric-web/chaincode/go/abac
-}
-
-# 链码实例化策略
-function makePolicy {
-
-    # NAME=liucl
-    # echo "My Name is '${NAME}'" -> My Name is 'liucl'
-    # echo My Name is '${NAME}' -> My Name is ${NAME}
-
-    POLICY="OR("
-    local COUNT=0
-
-    for ORG in $PEER_ORGS; do
-        if [ $COUNT -ne 0 ]; then
-            POLICY="${POLICY}," # 拼接逗号
-        fi
-
-        initOrgVars $ORG
-        POLICY="${POLICY}'${ORG_MSP_ID}.member'"
-        COUNT=$((COUNT+1))
-    done
-
-    POLICY="${POLICY})"
-    log "policy: $POLICY"
-}
-
-function chaincodeQuery {
-
-    if [ $# -ne 1 ]; then
-        fatalr "Usage: chaincodeQuery <expected-value>"
-    fi
-
-    set +e
-
-    logr "Querying chaincode in the channel '$CHANNEL_NAME' on the peer '$PEER_HOST' ..."
-
-    local rc=1
-    local starttime=$(date +%s)
-
-    # Continue to poll until we get a successful response or reach QUERY_TIMEOUT
-    while test "$(($(date +%s)-starttime))" -lt "$QUERY_TIMEOUT"; do
-        sleep 1
-        peer chaincode query -C $CHANNEL_NAME -n mycc -c '{"Args":["query","a"]}' >& log.txt
-        VALUE=$(cat log.txt | awk '/Query Result/ {print $NF}')
-        if [ $? -eq 0 -a "$VALUE" = "$1" ]; then
-            logr "Query of channel '$CHANNEL_NAME' on peer '$PEER_HOST' was successful"
-            set -e
-            return 0
-        fi
-        echo -n "."
-    done
-
-    cat log.txt
-    cat log.txt >> $RUN_SUMFILE
-    fatalr "Failed to query channel '$CHANNEL_NAME' on peer '$PEER_HOST'; expected value was $1 and found $VALUE"
-}
-
 function main {
 
     done=false # 标记是否执行完成所有以下操作
-
-    # 等待所有orderers和peers节点启动
-    waitAllOrderersAndPeers
 
     # trap 捕获信号
     # 在终端一个shell程序的执行过程中，当你按下 Ctrl + C 键或 Break 键，正常程序将立即终止，并返回命令提示符。这可能并不总是可取的。例如，你可能最终留下了一堆临时文件，将不会清理。
@@ -163,6 +19,32 @@ function main {
 
     mkdir -p $LOGPATH
     logr "The docker 'run' container has started"
+
+    log "Get the CLI client certificate and private key used for tls client authentication from the CA ..."
+    # 脚本使用到了 ORDERER_CONN_ARGS，其开启了客户端tls验证，需要获取每个peer节点的tls证书和私钥
+    for ORG in $PEER_ORGS; do
+
+        initOrgVars $ORG
+        # 此配置针对于run为指定组织向CA服务端申请根证书使用
+        export FABRIC_CA_CLIENT_TLS_CERTFILES=$PWD$CA_CHAINFILE
+
+        COUNT=1
+        while [[ "$COUNT" -le $NUM_PEERS ]]; do
+            initPeerVars $ORG $COUNT
+            # Generate client TLS cert and key pair for the peer CLI
+            # 登记并获取peer节点的tls证书
+            # /$DATA/tls/$PEER_NAME-cli-client.crt
+            # /$DATA/tls/$PEER_NAME-cli-client.key
+            fabric-ca-client enroll -d --enrollment.profile tls -u https://$PEER_NAME_PASS@$CA_HOST:7054 -M $PWD/tmp/tls --csr.hosts $PEER_NAME
+
+            mkdir -p $PWD/$DATA/tls || true
+            cp $PWD/tmp/tls/signcerts/* $PWD/$DATA/tls/$PEER_NAME-cli-client.crt
+            cp $PWD/tmp/tls/keystore/* $PWD/$DATA/tls/$PEER_NAME-cli-client.key
+            rm -rf $PWD/tmp/tls
+
+            COUNT=$((COUNT+1))
+        done
+    done
 
     # IFS
     #   在bash中IFS是内部的域分隔符。IFS的默认值为：空白（包括：空格，tab, 和新行)，将其ASSII码用十六进制打印出来就是：20 09 0a
@@ -244,6 +126,120 @@ function main {
     switchToUserIdentity
     chaincodeQuery 90
 
+    done=true
+}
+
+function finish {
+
+    if [ "$done" = true ]; then
+        logr "See $RUN_LOGFILE for more details"
+        touch /$RUN_SUCCESS_FILE
+    else
+        logr "Tests did not complete successfully; see $RUN_LOGFILE for more details"
+        touch /$RUN_FAIL_FILE
+    fi
+}
+
+# 切换到第一个peer组织的管理员身份，然后创建应用通道。
+function createChannel {
+
+    # 切换到第一个peer组织的管理员身份。如果之前没有登记，则登记。
+    # 这里使用initPeerVars方法对ORDERER_CONN_ARGS进行初始化，以指定keyfile私钥、certfile证书文件参数
+    initPeerVars ${PORGS[0]} 1
+    switchToAdminIdentity
+
+    logr "Creating channel '$CHANNEL_NAME' on $ORDERER_HOST ..."
+
+    peer channel create --logging-level=DEBUG -c $CHANNEL_NAME -f $CHANNEL_TX_FILE $ORDERER_CONN_ARGS
+}
+
+# 切换到peer组织的管理员身份，然后加入应用通道
+function joinChannel {
+
+    switchToAdminIdentity
+
+    set +e
+
+    local COUNT=1
+    MAX_RETRY=10
+
+    while true; do
+        logr "Peer $PEER_HOST is attempting to join channel '$CHANNEL_NAME' (attempt #${COUNT}) ..."
+        peer channel join -b $CHANNEL_NAME.block
+        if [ $? -eq 0 ]; then
+            set -e
+            logr "Peer $PEER_HOST successfully joined channel '$CHANNEL_NAME'"
+            return
+        fi
+        if [ $COUNT -gt $MAX_RETRY ]; then
+            fatalr "Peer $PEER_HOST failed to join channel '$CHANNEL_NAME' in $MAX_RETRY retries"
+        fi
+        COUNT=$((COUNT+1))
+        sleep 1
+    done
+}
+
+# 切换到peer组织的管理员身份，然后安装链码
+function installChaincode {
+
+    switchToAdminIdentity
+    logr "Installing chaincode on $PEER_HOST ..."
+    peer chaincode install -n mycc -v 1.0 -p github.com/hyperledger/fabric-web/chaincode/go/chaincode_example02
+}
+
+# 链码实例化策略
+function makePolicy {
+
+    # NAME=liucl
+    # echo "My Name is '${NAME}'" -> My Name is 'liucl'
+    # echo My Name is '${NAME}' -> My Name is ${NAME}
+
+    POLICY="OR("
+    local COUNT=0
+
+    for ORG in $PEER_ORGS; do
+        if [ $COUNT -ne 0 ]; then
+            POLICY="${POLICY}," # 拼接逗号
+        fi
+
+        initOrgVars $ORG
+        POLICY="${POLICY}'${ORG_MSP_ID}.member'"
+        COUNT=$((COUNT+1))
+    done
+
+    POLICY="${POLICY})"
+    log "policy: $POLICY"
+}
+
+function chaincodeQuery {
+
+    if [ $# -ne 1 ]; then
+        fatalr "Usage: chaincodeQuery <expected-value>"
+    fi
+
+    set +e
+
+    logr "Querying chaincode in the channel '$CHANNEL_NAME' on the peer '$PEER_HOST' ..."
+
+    local rc=1
+    local starttime=$(date +%s)
+
+    # Continue to poll until we get a successful response or reach QUERY_TIMEOUT
+    while test "$(($(date +%s)-starttime))" -lt "$QUERY_TIMEOUT"; do
+        sleep 1
+        peer chaincode query -C $CHANNEL_NAME -n mycc -c '{"Args":["query","a"]}' >& log.txt
+        VALUE=$(cat log.txt | awk '/Query Result/ {print $NF}')
+        if [ $? -eq 0 -a "$VALUE" = "$1" ]; then
+            logr "Query of channel '$CHANNEL_NAME' on peer '$PEER_HOST' was successful"
+            set -e
+            return 0
+        fi
+        echo -n "."
+    done
+
+    cat log.txt
+    cat log.txt >> $RUN_SUMFILE
+    fatalr "Failed to query channel '$CHANNEL_NAME' on peer '$PEER_HOST'; expected value was $1 and found $VALUE"
 }
 
 function logr {

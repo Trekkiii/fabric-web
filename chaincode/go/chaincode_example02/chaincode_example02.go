@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/hyperledger/fabric/core/chaincode/lib/cid"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	pb "github.com/hyperledger/fabric/protos/peer"
 )
@@ -29,24 +28,12 @@ import (
 type SimpleChaincode struct {
 }
 
-// Init initializes the chaincode
 func (t *SimpleChaincode) Init(stub shim.ChaincodeStubInterface) pb.Response {
-
-	fmt.Println("abac Init")
-
-	//
-	// Demonstrate the use of Attribute-Based Access Control (ABAC) by checking
-	// to see if the caller has the "abac.init" attribute with a value of true;
-	// if not, return an error.
-	//
-	err := cid.AssertAttributeValue(stub, "abac.init", "true")
-	if err != nil {
-		return shim.Error(err.Error())
-	}
-
+	fmt.Println("ex02 Init")
 	_, args := stub.GetFunctionAndParameters()
 	var A, B string    // Entities
 	var Aval, Bval int // Asset holdings
+	var err error
 
 	if len(args) != 4 {
 		return shim.Error("Incorrect number of arguments. Expecting 4")
@@ -80,7 +67,7 @@ func (t *SimpleChaincode) Init(stub shim.ChaincodeStubInterface) pb.Response {
 }
 
 func (t *SimpleChaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
-	fmt.Println("abac Invoke")
+	fmt.Println("ex02 Invoke")
 	function, args := stub.GetFunctionAndParameters()
 	if function == "invoke" {
 		// Make payment of X units from A to B

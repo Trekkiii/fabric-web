@@ -5,13 +5,23 @@
 # Apache-2.0
 #
 
+function finish {
+
+    if [ "$done" = true ]; then
+        log "See $PEER_LOGFILE for more details"
+        touch /$PEER_SUCCESS_FILE
+    else
+        log "Tests did not complete successfully; see $PEER_LOGFILE for more details"
+        touch /$PEER_FAIL_FILE
+    fi
+}
+
 set -e
 
-source $(dirname "$0")/env.sh
+done=false # 标记是否执行完成所有以下操作
+trap finish EXIT
 
-# 为peer节点向CA服务端申请根证书，并保存到/${DATA}/orgs/${ORG}/msp
-# 如果ADMINCERTS为true，我们需要登记组织管理员并将证书保存到/${DATA}/orgs/${ORG}/msp/admincerts
-getCACerts $ORG
+source $(dirname "$0")/env.sh
 
 # Although a peer may use the same TLS key and certificate file for both inbound and outbound TLS,
 # we generate a different key and certificate for inbound and outbound TLS simply to show that it is permissible
@@ -32,16 +42,16 @@ rm -rf /tmp/tls
 # 登记并获取peer节点的tls证书
 # /$DATA/tls/$PEER_NAME-client.crt
 # /$DATA/tls/$PEER_NAME-client.key
-genClientTLSCert $PEER_NAME $CORE_PEER_TLS_CLIENTCERT_FILE $CORE_PEER_TLS_CLIENTKEY_FILE
+getClientTLSCert $PEER_NAME $CORE_PEER_TLS_CLIENTCERT_FILE $CORE_PEER_TLS_CLIENTKEY_FILE
 
 # Generate client TLS cert and key pair for the peer CLI
 # 登记并获取peer节点的tls证书
 # /$DATA/tls/$PEER_NAME-cli-client.crt
 # /$DATA/tls/$PEER_NAME-cli-client.key
-genClientTLSCert $PEER_NAME /$DATA/tls/$PEER_NAME-cli-client.crt /$DATA/tls/$PEER_NAME-cli-client.key
+# getClientTLSCert $PEER_NAME /$DATA/tls/$PEER_NAME-cli-client.crt /$DATA/tls/$PEER_NAME-cli-client.key
 
-# 使用peer节点身份登记，以再次获取peer的证书(使用默认 profile)，并保存在 目录（peer节点的身份MSP）下
-# /opt/gopath/src/github.com/hyperledger/fabric/peer/msp
+# 使用peer节点身份登记，以再次获取peer的证书(使用默认 profile)，并保存在/opt/gopath/src/github.com/hyperledger/fabric/peer/msp目录（peer节点的身份MSP）下
+# CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/msp
 fabric-ca-client enroll -d -u $ENROLLMENT_URL -M $CORE_PEER_MSPCONFIGPATH
 
 finishMSPSetup $CORE_PEER_MSPCONFIGPATH
@@ -52,3 +62,4 @@ log "Starting peer '$CORE_PEER_ID' with MSP at '$CORE_PEER_MSPCONFIGPATH'"
 env | grep CORE
 peer node start
 
+done=true

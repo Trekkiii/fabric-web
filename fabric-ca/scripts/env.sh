@@ -4,8 +4,7 @@
 #
 # Apache-2.0
 
-# docker-compose网络的名称
-NETWORK=fabric-ca
+FABRIC_ROOT=$GOPATH/src/github.com/hyperledger/fabric
 
 # orderer组织的名称
 ORDERER_ORGS="org0"
@@ -47,10 +46,11 @@ SETUP_TIMEOUT=120
 LOGDIR=$DATA/logs # 默认 data/logs
 LOGPATH=/$LOGDIR # 默认 /data/logs
 
-# 标记'setup'容器成功执行完所有操作
-SETUP_SUCCESS_FILE=${LOGDIR}/setup.successful
 # 'setup'容器的日志文件
 SETUP_LOGFILE=${LOGDIR}/setup.log
+# 'run'容器成功和失败的日志文件
+SETUP_SUCCESS_FILE=${LOGDIR}/setup.success
+SETUP_FAIL_FILE=${LOGDIR}/setup.fail
 
 # 'run'容器的日志文件
 RUN_LOGFILE=${LOGDIR}/run.log
@@ -60,9 +60,6 @@ RUN_SUMPATH=/${RUN_SUMFILE}
 # 'run'容器成功和失败的日志文件
 RUN_SUCCESS_FILE=${LOGDIR}/run.success
 RUN_FAIL_FILE=${LOGDIR}/run.fail
-
-# TODO Affiliation并不用于限制用户，因此只需将所有身份置于相同的affiliation中。
-export FABRIC_CA_CLIENT_ID_AFFILIATION=org1
 
 # 启用中间层CA证书
 USE_INTERMEDIATE_CA=true
@@ -80,16 +77,28 @@ export CA_VERSION=$VERSION
 # current version of thirdparty images (couchdb, kafka and zookeeper) released
 export THIRDPARTY_IMAGE_VERSION=0.4.6
 
+export ARCH=$(echo "$(uname -s|tr '[:upper:]' '[:lower:]'|sed 's/mingw64_nt.*/windows/')-$(uname -m | sed 's/x86_64/amd64/g')" | awk '{print tolower($0)}')
+MARCH=`uname -m` # Set MARCH variable i.e ppc64le,s390x,x86_64,i386
+
+: ${CA_TAG:="$MARCH-$CA_VERSION"}
+: ${FABRIC_TAG:="$MARCH-$VERSION"}
+: ${THIRDPARTY_TAG:="$MARCH-$THIRDPARTY_IMAGE_VERSION"}
+
 # 删除所有fabric相关的容器
 function removeFabricContainers {
 
-    # 删除fabric容器（其镜像名称包含hyperledger的）
-    dockerContainers=$(docker ps -a | awk '$2~/hyperledger/ {print $1}')
-    if [ "$dockerContainers" != "" ]; then
-        log "Deleting existing docker containers ..."
-        docker rm -f $dockerContainers > /dev/null
+    if [ $# -ne 1 ]; then
+        echo "Usage: removeFabricContainersh <container>"
+        exit 1
     fi
 
+    container=$1
+
+    dockerContainers=$(docker ps -a | awk '$NF~/'${container}'/ {print $1}')
+    if [ "$dockerContainers" != "" ]; then
+        log "Deleting existing docker containers with images ${container} ..."
+        docker rm -f $dockerContainers > /dev/null
+    fi
 }
 
 # 删除链码容器和镜像
@@ -133,6 +142,8 @@ function initOrgVars {
 
     ORG=$1
 
+    export FABRIC_CA_CLIENT_ID_AFFILIATION=$ORG
+
     ORG_CONTAINER_NAME=${ORG//./-}
     # 组织管理员，通过CA注册
     ADMIN_NAME=admin-${ORG}
@@ -150,6 +161,9 @@ function initOrgVars {
     ROOT_CA_HOST=rca-${ORG}
     ROOT_CA_NAME=rca-${ORG}
     ROOT_CA_LOGFILE=$LOGDIR/${ROOT_CA_NAME}.log
+    # 'rca'容器容器成功和失败的日志文件
+    ROOT_CA_SUCCESS_FILE=$LOGDIR/${ROOT_CA_NAME}.success
+    ROOT_CA_FAIL_FILE=$LOGDIR/${ROOT_CA_NAME}.fail
     # 根CA管理员
     ROOT_CA_ADMIN_USER=rca-${ORG}-admin
     ROOT_CA_ADMIN_PASS=${ROOT_CA_ADMIN_USER}pw
@@ -160,6 +174,8 @@ function initOrgVars {
     INT_CA_HOST=ica-${ORG}
     INT_CA_NAME=ica-${ORG}
     INT_CA_LOGFILE=$LOGDIR/${INT_CA_NAME}.log
+    INT_CA_SUCCESS_FILE=$LOGDIR/${INT_CA_NAME}.success
+    INT_CA_FAIL_FILE=$LOGDIR/${INT_CA_NAME}.fail
     # 中间层CA管理员
     INT_CA_ADMIN_USER=ica-${ORG}-admin
     INT_CA_ADMIN_PASS=${INT_CA_ADMIN_USER}pw
@@ -171,7 +187,7 @@ function initOrgVars {
     INT_CA_CHAINFILE=/${DATA}/${ORG}-ca-chain.pem
 
     # 锚节点配置更新交易文件
-    ANCHOR_TX_FILE=/${DATA}/orgs/${ORG}/anchors.tx
+    ANCHOR_TX_FILE=/${DATA}/${ORG}-anchors.tx
 
     if test "$USE_INTERMEDIATE_CA" = "true"; then
         CA_NAME=$INT_CA_NAME
@@ -204,6 +220,8 @@ function initOrdererVars {
     ORDERER_PASS=${ORDERER_NAME}pw
     ORDERER_NAME_PASS=${ORDERER_NAME}:${ORDERER_PASS}
     ORDERER_LOGFILE=$LOGDIR/${ORDERER_NAME}.log
+    ORDERER_SUCCESS_FILE=$LOGDIR/${ORDERER_NAME}.success
+    ORDERER_FAIL_FILE=$LOGDIR/${ORDERER_NAME}.fail
 
     MYHOME=/etc/hyperledger/orderer
     TLSDIR=$MYHOME/tls
@@ -244,6 +262,8 @@ function initPeerVars {
     PEER_PASS=${PEER_NAME}pw
     PEER_NAME_PASS=${PEER_NAME}:${PEER_PASS}
     PEER_LOGFILE=$LOGDIR/${PEER_NAME}.log
+    PEER_SUCCESS_FILE=$LOGDIR/${PEER_NAME}.success
+    PEER_FAIL_FILE=$LOGDIR/${PEER_NAME}.fail
 
     MYHOME=/opt/gopath/src/github.com/hyperledger/fabric/peer
     TLSDIR=$MYHOME/tls
@@ -258,7 +278,7 @@ function initPeerVars {
     # bridge network as the peers
     # https://docs.docker.com/compose/networking/
     # export CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=${COMPOSE_PROJECT_NAME}_${NETWORK}
-    export CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=net_${NETWORK}
+    export CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=host
     # export CORE_LOGGING_LEVEL=ERROR
     export CORE_LOGGING_LEVEL=DEBUG
 
@@ -292,7 +312,7 @@ function initPeerVars {
 function finishMSPSetup {
 
     if [ $# -ne 1 ]; then
-        fatal "Usage: finishMSPSetup <targetMSPDIR>"
+        fatal "Usage: finishMSPSetup <target_msp_dir>"
     fi
 
     # $1 传入的msp目录
@@ -306,32 +326,8 @@ function finishMSPSetup {
     fi
 }
 
-# 当启用ADMINCERTS时
-#
-# 将组织的管理员证书拷贝到目标msp目录
-function copyAdminCert {
-
-    if [ $# -ne 1 ]; then
-        fatal "Usage: copyAdminCert <targetMSPDIR>"
-    fi
-
-    if $ADMINCERTS; then
-
-        # 登记组织管理员并获取组织管理员身份证书
-        switchToAdminIdentity
-
-        dowait "$ORG administator to enroll" 60 $SETUP_LOGFILE $ORG_ADMIN_CERT
-
-        dstDir=$1/admincerts
-        mkdir -p $dstDir
-        # ORG_ADMIN_CERT=/${DATA}/orgs/${ORG}/msp/admincerts/cert.pem
-        # 对于orderer节点：dstDir=/etc/hyperledger/orderer/msp/admincerts
-        # 对于peer节点：dstDir=/opt/gopath/src/github.com/hyperledger/fabric/peer/msp
-        cp $ORG_ADMIN_CERT $dstDir
-    fi
-}
-
-# 1. 切换到当前组织的管理员身份；
+# 用于peer节点!!!(CORE_PEER_MSPCONFIGPATH is just for Peer)
+# 1. 切换到peer组织的管理员身份；
 # 2. 如果之前没有登记，则登记，
 #   2.1 保存登记时生成的身份证书至/${DATA}/orgs/${ORG}/admin目录下；
 #       会在该目录下生成fabric-ca-client-config.yaml文件以及创建msp目录存放身份证书文件
@@ -339,9 +335,38 @@ function copyAdminCert {
 #   2.3 将/${DATA}/orgs/${ORG}/admin/msp/signcerts/下的证书拷贝为/${DATA}/orgs/${ORG}/admin/msp/admincerts/cert.pem
 function switchToAdminIdentity {
 
-    # 2. 如果之前没有登记，则登记
+    # 1. 切换到peer组织的管理员身份
+    export CORE_PEER_MSPCONFIGPATH=$ORG_ADMIN_HOME/msp # /${DATA}/orgs/${ORG}/admin/msp
+
+    # 2. 登记管理员身份获取证书
+    getAdminCert
+}
+
+# 切换到peer组织的普通用户身份，如果之前没有登记，则登记。
+function switchToUserIdentity {
+
+    # fabric-ca-client主配置目录
+    # fabric-ca-client会在该目录下搜索配置文件，
+    # 同样，也会在该目录下生成fabric-ca-client-config.yaml文件以及创建msp目录存放身份证书文件
+    export FABRIC_CA_CLIENT_HOME=/etc/hyperledger/fabric/orgs/$ORG/user
+    # 切换到peer组织的普通用户身份
+    export CORE_PEER_MSPCONFIGPATH=$FABRIC_CA_CLIENT_HOME/msp
+
+    # 登记普通用户身份获取证书
+    getUserCert
+}
+
+# 获取组织管理员身份证书。如果存在，则不再登记，否则登记组织管理员身份
+#   1. 保存登记时生成的身份证书至/${DATA}/orgs/${ORG}/admin目录下；
+#       会在该目录下生成fabric-ca-client-config.yaml文件以及创建msp目录存放身份证书文件
+#   2. 将/${DATA}/orgs/${ORG}/admin/msp/signcerts/下的证书拷贝为/${DATA}/orgs/${ORG}/msp/admincerts/cert.pem
+#   3. 将/${DATA}/orgs/${ORG}/admin/msp/signcerts/下的证书拷贝为/${DATA}/orgs/${ORG}/admin/msp/admincerts/cert.pem
+function getAdminCert {
+
+    # 如果之前没有登记，则登记
     if [ ! -d $ORG_ADMIN_HOME ]; then # /${DATA}/orgs/${ORG}/admin
-        # 等待CA服务端将初始化生成的根证书拷贝为CA_CHAINFILE文件
+        # 等待将CA服务端初始化生成的根证书拷贝为CA_CHAINFILE文件
+        # 即校验本地CA_CHAINFILE证书文件是否存在
         dowait "$CA_NAME to start" 60 $CA_LOGFILE $CA_CHAINFILE
 
         log "Enrolling admin '$ADMIN_NAME' with $CA_HOST ..."
@@ -351,8 +376,6 @@ function switchToAdminIdentity {
         # 同样，也会在该目录下生成fabric-ca-client-config.yaml文件以及创建msp目录存放身份证书文件
         export FABRIC_CA_CLIENT_HOME=$ORG_ADMIN_HOME
 
-        # 向CA服务端登记组织管理员身份时使用
-        # 该环境变量配置主要针对'setup'等节点，
         # 而对于orderer、peer节点，在其docker-compose.yaml中的service.xxx.environment中已经定义FABRIC_CA_CLIENT_TLS_CERTFILES环境变量
         export FABRIC_CA_CLIENT_TLS_CERTFILES=$CA_CHAINFILE
 
@@ -371,30 +394,19 @@ function switchToAdminIdentity {
             cp $ORG_ADMIN_HOME/msp/signcerts/* $ORG_ADMIN_HOME/msp/admincerts
         fi
     fi
-
-    # 1. 切换到当前组织的管理员身份
-    export CORE_PEER_MSPCONFIGPATH=$ORG_ADMIN_HOME/msp # /${DATA}/orgs/${ORG}/admin/msp
 }
 
-# 切换到peer组织的普通用户身份，如果之前没有登记，则登记。
-function switchToUserIdentity {
-
-    # fabric-ca-client主配置目录
-    # fabric-ca-client会在该目录下搜索配置文件，
-    # 同样，也会在该目录下生成fabric-ca-client-config.yaml文件以及创建msp目录存放身份证书文件
-    export FABRIC_CA_CLIENT_HOME=/etc/hyperledger/fabric/orgs/$ORG/user
-    # 1. 切换到peer组织的管理员身份
-    export CORE_PEER_MSPCONFIGPATH=$FABRIC_CA_CLIENT_HOME/msp
+# 登记普通用户身份获取证书
+function getUserCert {
 
     if [ ! -d $FABRIC_CA_CLIENT_HOME ]; then
 
-        # 等待CA服务端将初始化生成的根证书拷贝为CA_CHAINFILE文件
+        # 等待将CA服务端初始化生成的根证书拷贝为CA_CHAINFILE文件
+        # 即校验本地CA_CHAINFILE证书文件是否存在
         dowait "$CA_NAME to start" 60 $CA_LOGFILE $CA_CHAINFILE
 
         log "Enrolling user for organization $ORG with home directory $FABRIC_CA_CLIENT_HOME ..."
 
-        # 向CA服务端登记组织普通用户身份时使用
-        # 该环境变量配置主要针对'run'等节点，
         # 而对于orderer、peer节点，在其docker-compose.yaml中的service.xxx.environment中已经定义FABRIC_CA_CLIENT_TLS_CERTFILES环境变量
         export FABRIC_CA_CLIENT_TLS_CERTFILES=$CA_CHAINFILE
 
@@ -407,14 +419,66 @@ function switchToUserIdentity {
             mkdir -p $ACDIR
             cp $ORG_ADMIN_HOME/msp/signcerts/* $ACDIR
         fi
-
     fi
 }
 
-function genClientTLSCert {
+# 当启用ADMINCERTS时，将组织的管理员证书拷贝到dstDir目录
+# dstDir：
+#       对于orderer节点：/etc/hyperledger/orderer/msp/admincerts
+#       对于peer节点：/opt/gopath/src/github.com/hyperledger/fabric/peer/msp/admincerts
+function copyAdminCert {
+
+    if [ $# -ne 1 ]; then
+        fatal "Usage: copyAdminCert <target_msp_dir>"
+    fi
+
+    if $ADMINCERTS; then
+        dstDir=$1/admincerts
+        mkdir -p $dstDir
+        # ORG_ADMIN_CERT=/${DATA}/orgs/${ORG}/msp/admincerts/cert.pem
+        # dstDir：
+        #       对于orderer节点：/etc/hyperledger/orderer/msp/admincerts
+        #       对于peer节点：/opt/gopath/src/github.com/hyperledger/fabric/peer/msp/admincerts
+        dowait "$ORG administator to enroll" 60 $SETUP_LOGFILE $ORG_ADMIN_CERT
+        cp $ORG_ADMIN_CERT $dstDir
+    fi
+}
+
+# 为所有组织向CA服务端申请根证书，并保存到/${DATA}/orgs/${ORG}/msp
+# 如果ADMINCERTS为true，我们需要登记组织管理员并将证书保存到/${DATA}/orgs/${ORG}/msp/admincerts
+function getCACerts {
+
+    log "Getting CA certificates ..."
+
+    for ORG in $ORGS; do
+
+        initOrgVars $ORG
+
+        log "Getting CA certs for organization $ORG and storing in $ORG_MSP_DIR"
+
+        # 对于orderer、peer节点，在其docker-compose.yaml中的service.xxx.environment中已经定义FABRIC_CA_CLIENT_TLS_CERTFILES环境变量
+        export FABRIC_CA_CLIENT_TLS_CERTFILES=$CA_CHAINFILE
+
+        # 向CA服务端申请根证书，并保存到/${DATA}/orgs/${ORG}/msp目录下的/cacerts 与 /intermediatecerts文件夹下
+        # ORG_MSP_DIR=/${DATA}/orgs/${ORG}/msp
+        fabric-ca-client getcacert -d -u https://$CA_HOST:7054 -M $ORG_MSP_DIR
+
+        # 如果msp目录下的tls相关证书目录不存在的话，则创建它们。
+        #   1. 创建msp/tlscacerts目录并将msp/cacerts目录下的证书拷贝到其下
+        #   2. 创建msp/tlsintermediatecerts目录并将msp/intermediatecerts目录下的证书拷贝到其下
+        finishMSPSetup $ORG_MSP_DIR
+
+        # 如果ADMINCERTS为true，我们需要登记组织管理员并将证书保存到msp目录下的admincerts文件夹下
+        if [ $ADMINCERTS ]; then
+            getAdminCert
+        fi
+    done
+}
+
+function getClientTLSCert {
 
     if [ $# -ne 3 ]; then
-        echo "Usage: genClientTLSCert <host name> <cert file> <key file>: $*"
+        echo "Usage: getClientTLSCert <host_name> <cert_file> <key_file>: $*"
         exit 1
     fi
 
@@ -430,66 +494,277 @@ function genClientTLSCert {
     rm -rf /tmp/tls
 }
 
-# 从远程CA服务端获取CA_CHAINFILE
-# fetchCAChainfile <ORG> <CA_CHAINFILE>
-function fetchCAChainfile {
+# 从远程Peer获取客户端验证TLS证书
+function fetchClientTLSCert {
 
-    if [ $# -ne 2 ]; then
-        echo "Usage: fetchCAChainfile <ORG> <CA_CHAINFILE>"
+    if [ $# -ne 3 ]; then
+        echo "Usage: fetchClientTLSCert <org> <num> <client_cert_file>: $*"
         exit 1
     fi
 
-    ORG=$1
-    CA_CHAINFILE=$2
+    local ORG=$1
+    local NUM=$2
+    local TLS_CLIENTCERT_FILE=$3
 
-    echo "Installing jq"
-    # 使用-y选项会在安装过程中使用默认设置，如果默认设置为N，那么就会选择N，而不会选择y。并没有让apt-get一直选择y的选项。
-    apt-get -y update && apt-get -y install jq
+    installJQ
+
     # 校验fabric.config配置是否是合法性JSON
     cat fabric.config | jq . >& /dev/null
     if [ $? -ne 0 ]; then
         fatal "fabric.config isn't JSON format"
     fi
 
-    # 获取指定CA连接属性
-    # 使用中间层CA
-    if $USE_INTERMEDIATE_CA; then
-        CA_UNAME=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.ICA.UNAME')
+    # 获取指定Peer的连接属性
+    PEER_USER_NAME=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.PEERS['"$((NUM-1))"'].USER_NAME')
+    PEER_IP=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.PEERS['"$((NUM-1))"'].IP')
+    PEER_PATH=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.PEERS['"$((NUM-1))"'].PATH')
+
+    # 判断是否可访问Peer服务
+    waitPort "access Peer < ip: $PEER_HOST > via port 22" 90 "" $PEER_HOST 22
+
+    set +e
+
+    local TLS_CLIENTCERT_REMOTE_FILE="${PEER_PATH}${TLS_CLIENTCERT_FILE}"
+    echo "    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑"
+    echo "    　 To: Peer服务器 < ip: ${PEER_IP}, username: ${PEER_USER_NAME} >"
+    echo
+    echo "    　 -> 检查Peer客户端验证TLS证书 < ${TLS_CLIENTCERT_REMOTE_FILE} > 是否可用..."
+    echo
+    echo "    　 * 温馨提示：你可以配置ssh免登陆哦！~"
+    echo "    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+    ssh ${PEER_USER_NAME}@${PEER_IP} "[ -f ${TLS_CLIENTCERT_REMOTE_FILE} ]"
+    if [ $? -ne 0 ]; then
+        fatal "Remote Peer client tls certificate not found"
+    fi
+
+    local TLS_CLIENTCERT_LOCAL_PATH=$(dirname "$PWD${TLS_CLIENTCERT_FILE}")
+    if [ ! -d ${TLS_CLIENTCERT_LOCAL_PATH} ]; then
+        mkdir -p ${TLS_CLIENTCERT_LOCAL_PATH}
+    fi
+
+    cat << EOF
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
+    　 -> 拉取Peer客户端验证TLS证书...
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+EOF
+
+    scp ${PEER_USER_NAME}@${PEER_IP}:${TLS_CLIENTCERT_REMOTE_FILE} "$PWD${TLS_CLIENTCERT_FILE}"
+    if [ $? -ne 0 ]; then
+        fatal "Failed to copy client tls certificate from remote Peer"
+    fi
+    log "Copy the client tls certificate from the remote Peer successfully and store it as ${TLS_CLIENTCERT_FILE}"
+
+    set -e
+}
+
+# 从远程CA服务端获取CA_CHAINFILE
+# fetchCAChain <org> <ca_chainfile> [<is_root_ca_certfile>]
+function fetchCAChain {
+
+    if [ $# -lt 2 ]; then
+        echo "Usage: fetchCAChain <org> <ca_chainfile> [<is_root_ca_certfile>]: $*"
+        exit 1
+    fi
+
+    local ORG=$1
+    local CA_CHAINFILE=$2
+    local IS_ROOT_CA_CERTFILE=$3 # 获取的是否是根CA证书
+    : ${IS_ROOT_CA_CERTFILE:=false}
+
+    installJQ
+
+    # 校验fabric.config配置是否是合法性JSON
+    cat fabric.config | jq . >& /dev/null
+    if [ $? -ne 0 ]; then
+        fatal "fabric.config isn't JSON format"
+    fi
+
+    # 获取指定CA的连接属性
+    if $USE_INTERMEDIATE_CA && ! $IS_ROOT_CA_CERTFILE; then
+        CA_USER_NAME=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.ICA.USER_NAME')
         CA_IP=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.ICA.IP')
-        CAPATH=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.ICA.CAPATH')
+        CA_PATH=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.ICA.PATH')
     else
-        CA_UNAME=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.RCA.UNAME')
+        CA_USER_NAME=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.RCA.USER_NAME')
         CA_IP=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.RCA.IP')
-        CAPATH=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.RCA.CAPATH')
+        CA_PATH=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.RCA.PATH')
     fi
 
     # 判断是否可访问CA服务
-    waitPort "CA server[ip: $CA_IP] to access through port 22" 90 "https://github.com/fnpac/fabric-web/tree/master/fabric-ca#启动CA服务" $CA_IP 22
+    waitPort "access CA < ip: $CA_IP > via port 22" 90 "" $CA_IP 22
 
-    cat << EOF
-    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
-    　 请输入CA服务器 [IP: ${CA_IP}, UNAME: ${CA_UNAME}] 的密码 -> 检查CA根证书是否可用...
-    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-EOF
-    local remotePath="${CAPATH}${CA_CHAINFILE}"
-    ssh ${CA_UNAME}@${CA_IP} "[ -f ${remotePath} ]"
+    set +e
+
+    local CACHAIN_REMOTE_FILE="${CA_PATH}${CA_CHAINFILE}"
+    echo "    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑"
+    echo "    　 To: CA服务器 < ip: ${CA_IP}, username: ${CA_USER_NAME} >"
+    echo
+    echo "    　 -> 检查CA根证书 < ${CACHAIN_REMOTE_FILE} > 是否可用..."
+    echo
+    echo "    　 * 温馨提示：你可以配置ssh免登陆哦！~"
+    echo "    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+    ssh ${CA_USER_NAME}@${CA_IP} "[ -f ${CACHAIN_REMOTE_FILE} ]"
     if [ $? -ne 0 ]; then
-        fatal "Remote CA certificate of ${remotePath} not found"
+        fatal "Remote CA certificate not found"
     fi
 
-    mkdir -p ${DATA}
+    local CACHAIN_LOCAL_PATH=$(dirname "$PWD${CA_CHAINFILE}")
+    if [ ! -d ${CACHAIN_LOCAL_PATH} ]; then
+        mkdir -p ${CACHAIN_LOCAL_PATH}
+    fi
 
     cat << EOF
-    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
-    　 请再次输入CA服务器的密码 -> 拉取CA根证书...　　　
-    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
+    　 -> 拉取CA根证书...
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 EOF
 
-    scp ${CA_UNAME}@${CA_IP}:${remotePath} "$PWD${CA_CHAINFILE}"
+    scp ${CA_USER_NAME}@${CA_IP}:${CACHAIN_REMOTE_FILE} "$PWD${CA_CHAINFILE}"
     if [ $? -ne 0 ]; then
-        fatal "Failed to copy certificate [ ${remotePath} ] from remote CA"
+        fatal "Failed to copy certificate from remote CA"
     fi
     log "Copy the certificate from the remote CA successfully and store it as ${CA_CHAINFILE}"
+
+    set -e
+}
+
+# 从'setup'节点获取指定组织的MSP
+function fetchOrgMSP {
+
+    if [ $# -ne 1 ]; then
+        echo "Usage: fetchOrgMSP <org>"
+        exit 1
+    fi
+
+    local ORG=$1
+
+    initOrgVars $ORG
+
+    installJQ
+    # 校验fabric.config配置是否是合法性JSON
+    cat fabric.config | jq . >& /dev/null
+    if [ $? -ne 0 ]; then
+        fatal "fabric.config isn't JSON format"
+    fi
+
+    # 获取'setup'节点的连接属性
+    SETUP_USER_NAME=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.USER_NAME')
+    SETUP_IP=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.IP')
+    SETUP_PATH=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.PATH')
+
+    # 判断是否可访问'setup'节点
+    waitPort "access 'setup' < ip: $SETUP_IP > via port 22" 90 "" $SETUP_IP 22
+
+    set +e
+    local remoteOrgMsp="${SETUP_PATH}"$(dirname "$ORG_MSP_DIR")
+    echo "    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑"
+    echo "    　 To: \'setup\'服务器 < ip: ${SETUP_IP}, username: ${SETUP_USER_NAME} >"
+    echo
+    echo "    　 -> 检查组织MSP < ${remoteOrgMsp} > 是否可用..."
+    echo
+    echo "    　 * 温馨提示：你可以配置ssh免登陆哦！~"
+    echo "    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+    ssh ${SETUP_USER_NAME}@${SETUP_IP} "[ -d ${remoteOrgMsp} ]"
+    if [ $? -ne 0 ]; then
+        fatal "Remote ${ORG} MSP not found"
+    fi
+
+    local localOrgMspPath=$(dirname ${PWD}$(dirname "$ORG_MSP_DIR"))
+    if [ ! -d ${localOrgMspPath} ]; then
+        mkdir -p ${localOrgMspPath}
+    fi
+
+    cat << EOF
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
+    　 -> 拉取组织MSP...
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+EOF
+
+    scp -r ${SETUP_USER_NAME}@${SETUP_IP}:${remoteOrgMsp} ${PWD}$(dirname "$ORG_MSP_DIR")
+    if [ $? -ne 0 ]; then
+        fatal "Failed to copy MSP from remote 'setup'"
+    fi
+    log "Copy the MSP from the remote 'setup' successfully and store it as "${PWD}$(dirname "$ORG_MSP_DIR")
+    set -e
+}
+
+# 从'setup'节点获取配置交易文件
+function fetchChannelTx {
+
+    if [ $# -ne 1 ]; then
+        echo "Usage: fetchChannelTx <channel_tx_file>"
+        exit 1
+    fi
+
+    CHANNEL_TX_FILE=$1
+
+    installJQ
+    # 校验fabric.config配置是否是合法性JSON
+    cat fabric.config | jq . >& /dev/null
+    if [ $? -ne 0 ]; then
+        fatal "fabric.config isn't JSON format"
+    fi
+
+    # 获取'setup'节点的连接属性
+    SETUP_USER_NAME=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.USER_NAME')
+    SETUP_IP=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.IP')
+    SETUP_PATH=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.PATH')
+
+    # 判断是否可访问'setup'节点
+    waitPort "access 'setup' < ip: $SETUP_IP > via port 22" 90 "" $SETUP_IP 22
+
+    set +e
+    local remoteChannelTxFile="${SETUP_PATH}${CHANNEL_TX_FILE}"
+    echo "    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑"
+    echo "    　 To: \'setup\'服务器 < ip: ${SETUP_IP}, username: ${SETUP_USER_NAME} >"
+    echo
+    echo "    　 -> 检查配置交易文件 < ${remoteChannelTxFile} > 是否可用..."
+    echo
+    echo "    　 * 温馨提示：你可以配置ssh免登陆哦！~"
+    echo "    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+    ssh ${SETUP_USER_NAME}@${SETUP_IP} "[ -f ${remoteChannelTxFile} ]"
+    if [ $? -ne 0 ]; then
+        fatal "Remote channel configuration transaction not found"
+    fi
+
+    local localChannelTxPath=$(dirname "$PWD${CHANNEL_TX_FILE}")
+    if [ ! -d ${localChannelTxPath} ]; then
+        mkdir -p ${localChannelTxPath}
+    fi
+
+    cat << EOF
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
+    　 -> 拉取配置交易文件...
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+EOF
+
+    scp ${SETUP_USER_NAME}@${SETUP_IP}:${remoteChannelTxFile} "$PWD${CHANNEL_TX_FILE}"
+    if [ $? -ne 0 ]; then
+        fatal "Failed to copy channel configuration transaction from remote 'setup'"
+    fi
+    log "Copy the channel configuration transaction from the remote 'setup' successfully and store it as ${CHANNEL_TX_FILE}"
+    set -e
+}
+
+function installJQ {
+
+    set +e
+
+    which jq >& /dev/null
+    if [ $? -ne 0 ]; then
+#        log "Not installed jq"
+#        echo "Installing jq"
+#        # 使用-y选项会在安装过程中使用默认设置，如果默认设置为N，那么就会选择N，而不会选择y。并没有让apt-get一直选择y的选项。
+#        apt-get -y update && apt-get -y install jq
+        log "Not installed jq, Please install jq and try again!!!"
+        log ""
+        log "       sudo apt-get -y update && sudo apt-get -y install jq"
+        log ""
+        log "Good luck!~"
+        exit 1
+    fi
+
+    set -e
 }
 
 # 等待进程开始监听特定的主机和端口
@@ -528,12 +803,6 @@ function waitPort {
     set -e
 }
 
-# @Deprecated
-# 等待'setup'容器完成注册身份
-function awaitSetup {
-   dowait "the 'setup' container to finish registering identities" $SETUP_TIMEOUT $SETUP_LOGFILE /$SETUP_SUCCESS_FILE
-}
-
 # 等待多个文件生成
 # Usage: dowait <what> <timeoutInSecs> <errorLogFile> <file> [<file> ...]
 function dowait {
@@ -567,41 +836,6 @@ function dowait {
     done
 
     echo ""
-}
-
-# 为指定节点向CA服务端申请根证书，并保存到/${DATA}/orgs/${ORG}/msp
-# 如果ADMINCERTS为true，我们需要登记组织管理员并将证书保存到/${DATA}/orgs/${ORG}/msp/admincerts
-function getCACerts {
-
-    log "Getting CA certificates ..."
-
-    if [ $# -ne 1 ]; then
-        echo "Usage: getCACerts <ORG>"
-        exit 1
-    fi
-
-    ORG=$1
-    initOrgVars $ORG
-
-    log "Getting CA certs for organization $ORG and storing in $ORG_MSP_DIR"
-
-    # 对于orderer、peer节点，在其docker-compose.yaml中的service.xxx.environment中已经定义FABRIC_CA_CLIENT_TLS_CERTFILES环境变量
-    # export FABRIC_CA_CLIENT_TLS_CERTFILES=$CA_CHAINFILE
-
-    # TODO 申请根证书需要提供身份信息么？
-    # 向CA服务端申请根证书，并保存到/${DATA}/orgs/${ORG}/msp目录下的/cacerts 与 /intermediatecerts文件夹下
-    # ORG_MSP_DIR=/${DATA}/orgs/${ORG}/msp
-    fabric-ca-client getcacert -d -u https://$CA_HOST:7054 -M $ORG_MSP_DIR
-
-    # 如果msp目录下的tls相关证书目录不存在的话，则创建它们。
-    #   1. 创建msp/tlscacerts目录并将msp/cacerts目录下的证书拷贝到其下
-    #   2. 创建msp/tlsintermediatecerts目录并将msp/intermediatecerts目录下的证书拷贝到其下
-    finishMSPSetup $ORG_MSP_DIR
-
-    # 如果ADMINCERTS为true，我们需要登记组织管理员并将证书保存到msp目录下的admincerts文件夹下
-    if [ $ADMINCERTS ]; then
-        switchToAdminIdentity
-    fi
 }
 
 # log a message

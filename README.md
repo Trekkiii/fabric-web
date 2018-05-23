@@ -41,9 +41,12 @@ root@vm10-249-0-4:~/fabric-web/fabric-ca# chmod +x scripts/*.sh
     scp -r rca  ubuntu@<IP>:~/fabric/rca
     scp -r peer  ubuntu@<IP>:~/fabric/peer
     scp -r orderer  ubuntu@<IP>:~/fabric/orderer
+    scp -r setup  ubuntu@<IP>:~/fabric/setup
     ```
     
-    目录应该是这个样子：
+    > 务必将`setup`拷贝到第一个Peer组织的第一个peer节点上执行，否则在执行实例化链码时报错：Timeout...
+    
+    所有节点的目录应该类似这个样子：
     
     ![](./ica-tree.png)
     
@@ -152,7 +155,7 @@ setup-bootstrap.sh [-h] [-?] [-d]
     ~~脚本会将编译生成的`fabric-ca-server`和`fabric-ca-client`保存在`$GOPATH/bin`目录下。~~
 
 * 此外，你还需要配置当前机器的`/etc/host`，内容参见`build/host.config`。
-* 将安装的链码复制到'setup'同级目录下。
+* 将安装的**_链码_**复制到'setup'同级目录下。
 
 如果你执行完上述，那么来启动`setup`吧！~😍
 

@@ -35,8 +35,8 @@ function package {
     cp ${SDIR}/down-images.sh ${SDIR}/build/ica/down-images.sh
     cp ${SDIR}/scripts/start-intermediate-ca.sh ${SDIR}/build/ica/scripts/start-intermediate-ca.sh
     cp ${SDIR}/scripts/env.sh ${SDIR}/build/ica/scripts/env.sh
-    cp ${SDIR}/scripts/file_exits.sh ${SDIR}/build/rca/scripts/file_exits.sh
-    cp ${SDIR}/scripts/file_scp.sh ${SDIR}/build/rca/scripts/file_scp.sh
+    cp ${SDIR}/scripts/file_exits.sh ${SDIR}/build/ica/scripts/file_exits.sh
+    cp ${SDIR}/scripts/file_scp.sh ${SDIR}/build/ica/scripts/file_scp.sh
 
     ########################## 打包setup ##########################
     log "===> Package SETUP files"
@@ -48,8 +48,8 @@ function package {
     cp ${SDIR}/scripts/setup-fabric.sh ${SDIR}/build/setup/scripts/setup-fabric.sh
     cp ${SDIR}/scripts/run-fabric.sh ${SDIR}/build/setup/scripts/run-fabric.sh
     cp ${SDIR}/scripts/env.sh ${SDIR}/build/setup/scripts/env.sh
-    cp ${SDIR}/scripts/file_exits.sh ${SDIR}/build/rca/scripts/file_exits.sh
-    cp ${SDIR}/scripts/file_scp.sh ${SDIR}/build/rca/scripts/file_scp.sh
+    cp ${SDIR}/scripts/file_exits.sh ${SDIR}/build/setup/scripts/file_exits.sh
+    cp ${SDIR}/scripts/file_scp.sh ${SDIR}/build/setup/scripts/file_scp.sh
 
     ########################## 打包orderer ##########################
     log "===> Package ORDERER files"
@@ -60,8 +60,8 @@ function package {
     cp ${SDIR}/down-images.sh ${SDIR}/build/orderer/down-images.sh
     cp ${SDIR}/scripts/start-orderer.sh ${SDIR}/build/orderer/scripts/start-orderer.sh
     cp ${SDIR}/scripts/env.sh ${SDIR}/build/orderer/scripts/env.sh
-    cp ${SDIR}/scripts/file_exits.sh ${SDIR}/build/rca/scripts/file_exits.sh
-    cp ${SDIR}/scripts/file_scp.sh ${SDIR}/build/rca/scripts/file_scp.sh
+    cp ${SDIR}/scripts/file_exits.sh ${SDIR}/build/orderer/scripts/file_exits.sh
+    cp ${SDIR}/scripts/file_scp.sh ${SDIR}/build/orderer/scripts/file_scp.sh
 
     ########################## 打包peer ##########################
     log "===> Package PEER files"
@@ -72,8 +72,8 @@ function package {
     cp ${SDIR}/down-images.sh ${SDIR}/build/peer/down-images.sh
     cp ${SDIR}/scripts/start-peer.sh ${SDIR}/build/peer/scripts/start-peer.sh
     cp ${SDIR}/scripts/env.sh ${SDIR}/build/peer/scripts/env.sh
-    cp ${SDIR}/scripts/file_exits.sh ${SDIR}/build/rca/scripts/file_exits.sh
-    cp ${SDIR}/scripts/file_scp.sh ${SDIR}/build/rca/scripts/file_scp.sh
+    cp ${SDIR}/scripts/file_exits.sh ${SDIR}/build/peer/scripts/file_exits.sh
+    cp ${SDIR}/scripts/file_scp.sh ${SDIR}/build/peer/scripts/file_scp.sh
 
     log "===> Construct a host configuration"
     echo

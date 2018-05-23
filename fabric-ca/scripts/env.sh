@@ -4,24 +4,31 @@
 #
 # Apache-2.0
 
+installJQ
+# 校验fabric.config配置是否是合法性JSON
+cat fabric.config | jq . >& /dev/null
+if [ $? -ne 0 ]; then
+	fatal "fabric.config isn't JSON format"
+fi
+
 FABRIC_ROOT=$GOPATH/src/github.com/hyperledger/fabric
 
 # orderer组织的名称
-ORDERER_ORGS="org0"
+ORDERER_ORGS=$(cat fabric.config | jq -r '.ORDERER_ORGS')
 
 # peer组织的名称
-PEER_ORGS="org1 org2"
+PEER_ORGS=$(cat fabric.config | jq -r '.PEER_ORGS')
 
 # 每一个peer组织的peers数量
-NUM_PEERS=2
+NUM_PEERS=$(cat fabric.config | jq -r '.NUM_PEERS')
 
 # 每一个orderer组织的orderer节点的数量
-NUM_ORDERERS=1
+NUM_ORDERERS=$(cat fabric.config | jq -r '.NUM_ORDERERS')
 
 # 所有组织名称
 ORGS="$ORDERER_ORGS $PEER_ORGS"
 
-# 设置为true以填充msp的"admincerts"文件夹
+# 如果ADMINCERTS为true，我们需要登记组织管理员并将证书保存到msp目录下的admincerts文件夹下
 ADMINCERTS=true
 
 # 挂载的DATA目录
@@ -506,18 +513,11 @@ function fetchClientTLSCert {
     local NUM=$2
     local TLS_CLIENTCERT_FILE=$3
 
-    installJQ
-
-    # 校验fabric.config配置是否是合法性JSON
-    cat fabric.config | jq . >& /dev/null
-    if [ $? -ne 0 ]; then
-        fatal "fabric.config isn't JSON format"
-    fi
-
     # 获取指定Peer的连接属性
     PEER_USER_NAME=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.PEERS['"$((NUM-1))"'].USER_NAME')
     PEER_IP=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.PEERS['"$((NUM-1))"'].IP')
     PEER_PATH=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.PEERS['"$((NUM-1))"'].PATH')
+    PEER_PWD=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.PEERS['"$((NUM-1))"'].PWD')
 
     # 判断是否可访问Peer服务
     waitPort "access Peer < ip: $PEER_HOST > via port 22" 90 "" $PEER_HOST 22
@@ -532,9 +532,18 @@ function fetchClientTLSCert {
     echo
     echo "    　 * 温馨提示：你可以配置ssh免登陆哦！~"
     echo "    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
-    ssh ${PEER_USER_NAME}@${PEER_IP} "[ -f ${TLS_CLIENTCERT_REMOTE_FILE} ]"
-    if [ $? -ne 0 ]; then
+
+#    ssh ${PEER_USER_NAME}@${PEER_IP} "[ -f ${TLS_CLIENTCERT_REMOTE_FILE} ]"
+#    if [ $? -ne 0 ]; then
+#        fatal "Remote Peer client tls certificate not found"
+#    fi
+    ${SDIR}/scripts/file_exits.sh ${PEER_USER_NAME} ${PEER_IP} ${PEER_PWD} ${TLS_CLIENTCERT_REMOTE_FILE} >& ssh.log
+    if [ $? -eq 1 ]; then
         fatal "Remote Peer client tls certificate not found"
+    elif [ $? -eq 2 ]; then
+        fatal "Password is wrong!~"
+    else
+        fatal "Unknow error!~"
     fi
 
     local TLS_CLIENTCERT_LOCAL_PATH=$(dirname "$PWD${TLS_CLIENTCERT_FILE}")
@@ -548,17 +557,25 @@ function fetchClientTLSCert {
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 EOF
 
-    scp ${PEER_USER_NAME}@${PEER_IP}:${TLS_CLIENTCERT_REMOTE_FILE} "$PWD${TLS_CLIENTCERT_FILE}"
-    if [ $? -ne 0 ]; then
-        fatal "Failed to copy client tls certificate from remote Peer"
+#    scp ${PEER_USER_NAME}@${PEER_IP}:${TLS_CLIENTCERT_REMOTE_FILE} "$PWD${TLS_CLIENTCERT_FILE}"
+#    if [ $? -ne 0 ]; then
+#       fatal "Failed to copy client tls certificate from remote Peer"
+#    fi
+    ${SDIR}/scripts/file_scp.sh ${PEER_USER_NAME} ${PEER_IP} ${PEER_PWD} ${TLS_CLIENTCERT_REMOTE_FILE} "$PWD${TLS_CLIENTCERT_FILE}" >& ssh.log
+    if [ $? -eq 1 ]; then
+        fatal "Failed to copy client tls certificate from remote Peer. exits?"
+    elif [ $? -eq 2 ]; then
+        fatal "Password is wrong!~"
+    else
+        fatal "Unknow error!~"
     fi
+
     log "Copy the client tls certificate from the remote Peer successfully and store it as ${TLS_CLIENTCERT_FILE}"
 
     set -e
 }
 
 # 从远程CA服务端获取CA_CHAINFILE
-# fetchCAChain <org> <ca_chainfile> [<is_root_ca_certfile>]
 function fetchCAChain {
 
     if [ $# -lt 2 ]; then
@@ -571,23 +588,17 @@ function fetchCAChain {
     local IS_ROOT_CA_CERTFILE=$3 # 获取的是否是根CA证书
     : ${IS_ROOT_CA_CERTFILE:=false}
 
-    installJQ
-
-    # 校验fabric.config配置是否是合法性JSON
-    cat fabric.config | jq . >& /dev/null
-    if [ $? -ne 0 ]; then
-        fatal "fabric.config isn't JSON format"
-    fi
-
     # 获取指定CA的连接属性
     if $USE_INTERMEDIATE_CA && ! $IS_ROOT_CA_CERTFILE; then
         CA_USER_NAME=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.ICA.USER_NAME')
         CA_IP=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.ICA.IP')
         CA_PATH=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.ICA.PATH')
+        CA_PWD=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.ICA.PWD')
     else
         CA_USER_NAME=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.RCA.USER_NAME')
         CA_IP=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.RCA.IP')
         CA_PATH=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.RCA.PATH')
+        CA_PWD=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.RCA.PWD')
     fi
 
     # 判断是否可访问CA服务
@@ -603,9 +614,17 @@ function fetchCAChain {
     echo
     echo "    　 * 温馨提示：你可以配置ssh免登陆哦！~"
     echo "    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
-    ssh ${CA_USER_NAME}@${CA_IP} "[ -f ${CACHAIN_REMOTE_FILE} ]"
-    if [ $? -ne 0 ]; then
+#    ssh ${CA_USER_NAME}@${CA_IP} "[ -f ${CACHAIN_REMOTE_FILE} ]"
+#    if [ $? -ne 0 ]; then
+#        fatal "Remote CA certificate not found"
+#    fi
+    ${SDIR}/scripts/file_exits.sh ${CA_USER_NAME} ${CA_IP} ${CA_PWD} ${CACHAIN_REMOTE_FILE} >& ssh.log
+    if [ $? -eq 1 ]; then
         fatal "Remote CA certificate not found"
+    elif [ $? -eq 2 ]; then
+        fatal "Password is wrong!~"
+    else
+        fatal "Unknow error!~"
     fi
 
     local CACHAIN_LOCAL_PATH=$(dirname "$PWD${CA_CHAINFILE}")
@@ -619,10 +638,19 @@ function fetchCAChain {
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 EOF
 
-    scp ${CA_USER_NAME}@${CA_IP}:${CACHAIN_REMOTE_FILE} "$PWD${CA_CHAINFILE}"
-    if [ $? -ne 0 ]; then
-        fatal "Failed to copy certificate from remote CA"
+#    scp ${CA_USER_NAME}@${CA_IP}:${CACHAIN_REMOTE_FILE} "$PWD${CA_CHAINFILE}"
+#    if [ $? -ne 0 ]; then
+#        fatal "Failed to copy certificate from remote CA"
+#    fi
+    ${SDIR}/scripts/file_scp.sh ${CA_USER_NAME} ${CA_IP} ${CA_PWD} ${CACHAIN_REMOTE_FILE} "$PWD${CA_CHAINFILE}" >& ssh.log
+    if [ $? -eq 1 ]; then
+        fatal "Failed to copy certificate from remote CA. exits?"
+    elif [ $? -eq 2 ]; then
+        fatal "Password is wrong!~"
+    else
+        fatal "Unknow error!~"
     fi
+
     log "Copy the certificate from the remote CA successfully and store it as ${CA_CHAINFILE}"
 
     set -e
@@ -640,17 +668,11 @@ function fetchOrgMSP {
 
     initOrgVars $ORG
 
-    installJQ
-    # 校验fabric.config配置是否是合法性JSON
-    cat fabric.config | jq . >& /dev/null
-    if [ $? -ne 0 ]; then
-        fatal "fabric.config isn't JSON format"
-    fi
-
     # 获取'setup'节点的连接属性
     SETUP_USER_NAME=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.USER_NAME')
     SETUP_IP=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.IP')
     SETUP_PATH=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.PATH')
+    SETUP_PWD=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.PWD')
 
     # 判断是否可访问'setup'节点
     waitPort "access 'setup' < ip: $SETUP_IP > via port 22" 90 "" $SETUP_IP 22
@@ -664,9 +686,17 @@ function fetchOrgMSP {
     echo
     echo "    　 * 温馨提示：你可以配置ssh免登陆哦！~"
     echo "    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
-    ssh ${SETUP_USER_NAME}@${SETUP_IP} "[ -d ${remoteOrgMsp} ]"
-    if [ $? -ne 0 ]; then
+#    ssh ${SETUP_USER_NAME}@${SETUP_IP} "[ -d ${remoteOrgMsp} ]"
+#    if [ $? -ne 0 ]; then
+#        fatal "Remote ${ORG} MSP not found"
+#    fi
+    ${SDIR}/scripts/file_exits.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteOrgMsp} >& ssh.log
+    if [ $? -eq 1 ]; then
         fatal "Remote ${ORG} MSP not found"
+    elif [ $? -eq 2 ]; then
+        fatal "Password is wrong!~"
+    else
+        fatal "Unknow error!~"
     fi
 
     local localOrgMspPath=$(dirname ${PWD}$(dirname "$ORG_MSP_DIR"))
@@ -680,10 +710,19 @@ function fetchOrgMSP {
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 EOF
 
-    scp -r ${SETUP_USER_NAME}@${SETUP_IP}:${remoteOrgMsp} ${PWD}$(dirname "$ORG_MSP_DIR")
-    if [ $? -ne 0 ]; then
-        fatal "Failed to copy MSP from remote 'setup'"
+#    scp -r ${SETUP_USER_NAME}@${SETUP_IP}:${remoteOrgMsp} ${PWD}$(dirname "$ORG_MSP_DIR")
+#    if [ $? -ne 0 ]; then
+#        fatal "Failed to copy MSP from remote 'setup'"
+#    fi
+    ${SDIR}/scripts/file_scp.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteOrgMsp} ${PWD}$(dirname "$ORG_MSP_DIR") >& ssh.log
+    if [ $? -eq 1 ]; then
+        fatal "Failed to copy MSP from remote 'setup'. exits?"
+    elif [ $? -eq 2 ]; then
+        fatal "Password is wrong!~"
+    else
+        fatal "Unknow error!~"
     fi
+
     log "Copy the MSP from the remote 'setup' successfully and store it as "${PWD}$(dirname "$ORG_MSP_DIR")
     set -e
 }
@@ -698,17 +737,11 @@ function fetchChannelTx {
 
     CHANNEL_TX_FILE=$1
 
-    installJQ
-    # 校验fabric.config配置是否是合法性JSON
-    cat fabric.config | jq . >& /dev/null
-    if [ $? -ne 0 ]; then
-        fatal "fabric.config isn't JSON format"
-    fi
-
     # 获取'setup'节点的连接属性
     SETUP_USER_NAME=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.USER_NAME')
     SETUP_IP=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.IP')
     SETUP_PATH=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.PATH')
+    SETUP_PWD=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.PWD')
 
     # 判断是否可访问'setup'节点
     waitPort "access 'setup' < ip: $SETUP_IP > via port 22" 90 "" $SETUP_IP 22
@@ -722,9 +755,17 @@ function fetchChannelTx {
     echo
     echo "    　 * 温馨提示：你可以配置ssh免登陆哦！~"
     echo "    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
-    ssh ${SETUP_USER_NAME}@${SETUP_IP} "[ -f ${remoteChannelTxFile} ]"
-    if [ $? -ne 0 ]; then
+#    ssh ${SETUP_USER_NAME}@${SETUP_IP} "[ -f ${remoteChannelTxFile} ]"
+#    if [ $? -ne 0 ]; then
+#        fatal "Remote channel configuration transaction not found"
+#    fi
+    ${SDIR}/scripts/file_exits.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteChannelTxFile} >& ssh.log
+    if [ $? -eq 1 ]; then
         fatal "Remote channel configuration transaction not found"
+    elif [ $? -eq 2 ]; then
+        fatal "Password is wrong!~"
+    else
+        fatal "Unknow error!~"
     fi
 
     local localChannelTxPath=$(dirname "$PWD${CHANNEL_TX_FILE}")
@@ -738,10 +779,19 @@ function fetchChannelTx {
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 EOF
 
-    scp ${SETUP_USER_NAME}@${SETUP_IP}:${remoteChannelTxFile} "$PWD${CHANNEL_TX_FILE}"
-    if [ $? -ne 0 ]; then
-        fatal "Failed to copy channel configuration transaction from remote 'setup'"
+#    scp ${SETUP_USER_NAME}@${SETUP_IP}:${remoteChannelTxFile} "$PWD${CHANNEL_TX_FILE}"
+#    if [ $? -ne 0 ]; then
+#        fatal "Failed to copy channel configuration transaction from remote 'setup'"
+#    fi
+    ${SDIR}/scripts/file_scp.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteChannelTxFile} "$PWD${CHANNEL_TX_FILE}" >& ssh.log
+    if [ $? -eq 1 ]; then
+        fatal "Failed to copy channel configuration transaction from remote 'setup'. eixts?"
+    elif [ $? -eq 2 ]; then
+        fatal "Password is wrong!~"
+    else
+        fatal "Unknow error!~"
     fi
+
     log "Copy the channel configuration transaction from the remote 'setup' successfully and store it as ${CHANNEL_TX_FILE}"
     set -e
 }
@@ -759,6 +809,23 @@ function installJQ {
         log "Not installed jq, Please install jq and try again!!!"
         log ""
         log "       sudo apt-get -y update && sudo apt-get -y install jq"
+        log ""
+        log "Good luck!~"
+        exit 1
+    fi
+
+    set -e
+}
+
+function installExpect {
+
+    set +e
+
+    which expect >& /dev/null
+    if [ $? -ne 0 ]; then
+        log "Not installed expect, Please install expect and try again!!!"
+        log ""
+        log "       sudo apt-get -y update && sudo apt-get -y install expect"
         log ""
         log "Good luck!~"
         exit 1

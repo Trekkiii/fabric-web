@@ -48,6 +48,8 @@ SDIR=$(dirname "$0")
 source ${SDIR}/scripts/env.sh
 cd ${SDIR}
 
+installExpect
+
 initOrdererVars $ORG $NUM
 
 # 删除orderer容器
@@ -56,7 +58,6 @@ removeFabricContainers $ORDERER_NAME
 refreshData
 
 # 从远程CA服务端获取CAChain证书
-# fetchCAChain <org> <ca_chainfile> [<is_root_ca_certfile>]
 fetchCAChain $ORG $CA_CHAINFILE
 # 从'setup'节点获取创世区块
 fetchChannelTx ${GENESIS_BLOCK_FILE}

@@ -3,6 +3,12 @@
 假设你已经配置go、docker环境，并设置相关环境变量。
 如果没有，请参考：[>> README](https://github.com/fnpac/fabric-samples-cn/blob/master/README.md)
 
+通过如下脚本下载所需的所有镜像：
+
+```bash
+./down-images.sh
+```
+
 ## 使用步骤
 
 请使用如下命令为脚本增加执行权限：
@@ -13,6 +19,10 @@ root@vm10-249-0-4:~/fabric-web/fabric-ca#
 root@vm10-249-0-4:~/fabric-web/fabric-ca# 
 root@vm10-249-0-4:~/fabric-web/fabric-ca# chmod +x scripts/*.sh
 ```
+
+### 0. 网络拓扑
+
+通过`fabric.config`定义网络拓扑结构
 
 ### 1.构建项目，为不同节点打包脚本
 
@@ -103,6 +113,8 @@ root@vm10-249-0-4:~/fabric-web/fabric-ca# chmod +x scripts/*.sh
 - `orderer`节点需要从`setup`节点获取创世区块
 - `run`节点需要从`setup`节点获取应用通道配置交易文件、锚节点配置更新交易文件
 
+这些工作脚本也已经帮我们完成了！~ ✌ 
+
 ### 3. 启动setup
 
 setup容器用于：
@@ -126,18 +138,18 @@ setup-bootstrap.sh [-h] [-?] [-d]
     
     当然你也可以通过指定`-d`选项从网络下载该二进制文件
 
-* 脚本需要使用fabric的二进制文件`fabric-ca-client`，请将该二进制文件置于PATH路径下。
+* ~~脚本需要使用fabric的二进制文件`fabric-ca-client`，请将该二进制文件置于PATH路径下~~。
 
-    如果脚本找不到，会基于[fabric ca源码](https://github.com/hyperledger/fabric-ca)自动编译生成二进制文件，
-    此时需要保证`$HOME/gopath/src/github.com/hyperledger/fabric-ca`源码存在，且版本一致。
+    ~~如果脚本找不到，会基于[fabric ca源码](https://github.com/hyperledger/fabric-ca)自动编译生成二进制文件，
+    此时需要保证`$HOME/gopath/src/github.com/hyperledger/fabric-ca`源码存在，且版本一致。~~
 
-    编译`fabric-ca`相关代码，需要一些依赖包，可以通过如下命令安装:
+    ~~编译`fabric-ca`相关代码，需要一些依赖包，可以通过如下命令安装:~~
 
     ```bash
     sudo apt-get install libtool libltdl-dev
     ```
 
-    脚本会将编译生成的`fabric-ca-server`和`fabric-ca-client`保存在`$GOPATH/bin`目录下。
+    ~~脚本会将编译生成的`fabric-ca-server`和`fabric-ca-client`保存在`$GOPATH/bin`目录下。~~
 
 * 此外，你还需要配置当前机器的`/etc/host`，内容参见`build/host.config`。
 * 将安装的链码复制到'setup'同级目录下。
@@ -178,3 +190,9 @@ peer-bootstrap.sh [-h] [-?] <ORG> <NUM>
 
 - orderer增加kafka集群
 - 账本存储使用couchdb
+
+## 版本历史
+
+### v1.0.1
+
+* 新增`expect`，免去手动输入密码的烦恼；

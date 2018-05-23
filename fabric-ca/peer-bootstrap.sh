@@ -48,6 +48,8 @@ SDIR=$(dirname "$0")
 source ${SDIR}/scripts/env.sh
 cd ${SDIR}
 
+installExpect
+
 initPeerVars $ORG $NUM
 
 # 删除peer容器
@@ -58,7 +60,6 @@ refreshData
 removeChaincode
 
 # 从远程CA服务端获取CAChain证书
-# fetchCAChain <org> <ca_chainfile> [<is_root_ca_certfile>]
 fetchCAChain $ORG $CA_CHAINFILE
 # 从'setup'节点获取组织的MSP
 fetchOrgMSP $ORG

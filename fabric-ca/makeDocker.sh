@@ -352,8 +352,6 @@ function genPeerHosts {
 
 function main {
 
-    installJQ
-
     {
     # 编写header
     writeHeader

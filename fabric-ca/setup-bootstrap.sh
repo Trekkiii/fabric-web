@@ -173,6 +173,8 @@ SDIR=$(dirname "$0")
 source ${SDIR}/scripts/env.sh
 cd ${SDIR}
 
+installExpect
+
 if [ $(whoami) != "root" ]; then
     log "Please use root to execute this sh"
     exit 1
@@ -233,7 +235,6 @@ fi
 for ORG in $ORGS; do
     initOrgVars $ORG
     # 从远程CA服务端获取CAChain证书
-    # fetchCAChain <org> <ca_chainfile> [<is_root_ca_certfile>]
     fetchCAChain $ORG $CA_CHAINFILE
 done
 

@@ -19,6 +19,8 @@ SDIR=$(dirname "$0")
 source ${SDIR}/scripts/env.sh
 cd ${SDIR}
 
+installExpect
+
 initOrgVars $ORG
 
 # 删除ca容器
@@ -27,7 +29,6 @@ removeFabricContainers $INT_CA_NAME
 refreshData
 
 # 从远程CA服务端获取CACert证书
-# fetchCAChain <org> <ca_chainfile> [<is_root_ca_certfile>]
 fetchCAChain $ORG $ROOT_CA_CERTFILE true
 
 # 创建docker-compose.yml文件

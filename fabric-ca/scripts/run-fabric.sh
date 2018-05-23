@@ -102,9 +102,9 @@ function main {
         done
     done
 
-    # 在第二个Peer组织的第一个peer节点上实例化链码
+    # 在第一个Peer组织的第一个peer节点上实例化链码
     makePolicy
-    initPeerVars ${PORGS[1]} 1
+    initPeerVars ${PORGS[0]} 1
     switchToAdminIdentity
     logr "Instantiating chaincode on $PEER_HOST ..."
     peer chaincode instantiate -C $CHANNEL_NAME -n mycc -v 1.0 -c '{"Args":["init","a","100","b","200"]}' -P "$POLICY" $ORDERER_CONN_ARGS
@@ -120,9 +120,9 @@ function main {
     logr "Sending invoke transaction to $PEER_HOST ..."
     peer chaincode invoke -C $CHANNEL_NAME -n mycc -c '{"Args":["invoke","a","b","10"]}' $ORDERER_CONN_ARGS
 
-    # 在第二个Peer组织的第二个peer节点上查询链码
+    # 在第一个Peer组织的第一个peer节点上查询链码
     sleep 10
-    initPeerVars ${PORGS[1]} 2
+    initPeerVars ${PORGS[0]} 1
     switchToUserIdentity
     chaincodeQuery 90
 

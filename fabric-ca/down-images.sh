@@ -33,7 +33,10 @@ dockerThirdPartyImagesPull() {
   done
 }
 
-echo "===> Pulling fabric ca Image"
+echo "===> Pulling fabric images"
+curl -sSL https://raw.githubusercontent.com/fnpac/fabric-samples-cn/master/bootstrap.sh | bash -s 1.1.0 1.1.0 -s -b
+
+echo "===> Pulling fabric ca images"
 dockerCaPull ${CA_TAG}
 
 echo "===> Pulling thirdparty docker images"

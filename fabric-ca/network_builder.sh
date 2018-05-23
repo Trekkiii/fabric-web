@@ -68,8 +68,6 @@ function package {
     log "Construct a host configuration"
     echo
 
-    installJQ
-
     # 构造host配置
     {
 

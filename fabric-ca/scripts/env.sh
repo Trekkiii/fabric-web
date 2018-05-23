@@ -580,7 +580,7 @@ function fetchClientTLSCert {
         fatal "Remote Peer client tls certificate not found"
     elif [ $? -eq 2 ]; then
         fatal "Password is wrong!~"
-    else
+    elif [ $? -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 
@@ -604,7 +604,7 @@ EOF
         fatal "Failed to copy client tls certificate from remote Peer. exits?"
     elif [ $? -eq 2 ]; then
         fatal "Password is wrong!~"
-    else
+    elif [ $? -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 
@@ -661,7 +661,7 @@ function fetchCAChain {
         fatal "Remote CA certificate not found"
     elif [ $? -eq 2 ]; then
         fatal "Password is wrong!~"
-    else
+    elif [ $? -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 
@@ -685,7 +685,7 @@ EOF
         fatal "Failed to copy certificate from remote CA. exits?"
     elif [ $? -eq 2 ]; then
         fatal "Password is wrong!~"
-    else
+    elif [ $? -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 
@@ -733,7 +733,7 @@ function fetchOrgMSP {
         fatal "Remote ${ORG} MSP not found"
     elif [ $? -eq 2 ]; then
         fatal "Password is wrong!~"
-    else
+    elif [ $? -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 
@@ -757,7 +757,7 @@ EOF
         fatal "Failed to copy MSP from remote 'setup'. exits?"
     elif [ $? -eq 2 ]; then
         fatal "Password is wrong!~"
-    else
+    elif [ $? -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 
@@ -802,7 +802,7 @@ function fetchChannelTx {
         fatal "Remote channel configuration transaction not found"
     elif [ $? -eq 2 ]; then
         fatal "Password is wrong!~"
-    else
+    elif [ $? -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 
@@ -826,7 +826,7 @@ EOF
         fatal "Failed to copy channel configuration transaction from remote 'setup'. eixts?"
     elif [ $? -eq 2 ]; then
         fatal "Password is wrong!~"
-    else
+    elif [ $? -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 

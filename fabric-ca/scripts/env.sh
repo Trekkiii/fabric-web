@@ -4,6 +4,44 @@
 #
 # Apache-2.0
 
+function installJQ {
+
+    set +e
+
+    which jq >& /dev/null
+    if [ $? -ne 0 ]; then
+#        log "Not installed jq"
+#        echo "Installing jq"
+#        # 使用-y选项会在安装过程中使用默认设置，如果默认设置为N，那么就会选择N，而不会选择y。并没有让apt-get一直选择y的选项。
+#        apt-get -y update && apt-get -y install jq
+        log "Not installed jq, Please install jq and try again!!!"
+        log ""
+        log "       sudo apt-get -y update && sudo apt-get -y install jq"
+        log ""
+        log "Good luck!~"
+        exit 1
+    fi
+
+    set -e
+}
+
+function installExpect {
+
+    set +e
+
+    which expect >& /dev/null
+    if [ $? -ne 0 ]; then
+        log "Not installed expect, Please install expect and try again!!!"
+        log ""
+        log "       sudo apt-get -y update && sudo apt-get -y install expect"
+        log ""
+        log "Good luck!~"
+        exit 1
+    fi
+
+    set -e
+}
+
 installJQ
 # 校验fabric.config配置是否是合法性JSON
 cat fabric.config | jq . >& /dev/null
@@ -793,44 +831,6 @@ EOF
     fi
 
     log "Copy the channel configuration transaction from the remote 'setup' successfully and store it as ${CHANNEL_TX_FILE}"
-    set -e
-}
-
-function installJQ {
-
-    set +e
-
-    which jq >& /dev/null
-    if [ $? -ne 0 ]; then
-#        log "Not installed jq"
-#        echo "Installing jq"
-#        # 使用-y选项会在安装过程中使用默认设置，如果默认设置为N，那么就会选择N，而不会选择y。并没有让apt-get一直选择y的选项。
-#        apt-get -y update && apt-get -y install jq
-        log "Not installed jq, Please install jq and try again!!!"
-        log ""
-        log "       sudo apt-get -y update && sudo apt-get -y install jq"
-        log ""
-        log "Good luck!~"
-        exit 1
-    fi
-
-    set -e
-}
-
-function installExpect {
-
-    set +e
-
-    which expect >& /dev/null
-    if [ $? -ne 0 ]; then
-        log "Not installed expect, Please install expect and try again!!!"
-        log ""
-        log "       sudo apt-get -y update && sudo apt-get -y install expect"
-        log ""
-        log "Good luck!~"
-        exit 1
-    fi
-
     set -e
 }
 

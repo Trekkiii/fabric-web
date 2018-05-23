@@ -15,7 +15,7 @@ cd ${SDIR}
 function package {
 
     ########################## 打包rca ##########################
-    log "Package RCA files"
+    log "===> Package RCA files"
     mkdir -p ${SDIR}/build/rca/scripts
     cp ${SDIR}/rca-bootstrap.sh ${SDIR}/build/rca/rca-bootstrap.sh
     cp ${SDIR}/makeDocker.sh ${SDIR}/build/rca/makeDocker.sh
@@ -23,9 +23,11 @@ function package {
     cp ${SDIR}/down-images.sh ${SDIR}/build/rca/down-images.sh
     cp ${SDIR}/scripts/start-root-ca.sh ${SDIR}/build/rca/scripts/start-root-ca.sh
     cp ${SDIR}/scripts/env.sh ${SDIR}/build/rca/scripts/env.sh
+    cp ${SDIR}/scripts/file_exits.sh ${SDIR}/build/rca/scripts/file_exits.sh
+    cp ${SDIR}/scripts/file_scp.sh ${SDIR}/build/rca/scripts/file_scp.sh
 
     ########################## 打包ica ##########################
-    log "Package ICA files"
+    log "===> Package ICA files"
     mkdir -p ${SDIR}/build/ica/scripts
     cp ${SDIR}/ica-bootstrap.sh ${SDIR}/build/ica/ica-bootstrap.sh
     cp ${SDIR}/makeDocker.sh ${SDIR}/build/ica/makeDocker.sh
@@ -33,9 +35,11 @@ function package {
     cp ${SDIR}/down-images.sh ${SDIR}/build/ica/down-images.sh
     cp ${SDIR}/scripts/start-intermediate-ca.sh ${SDIR}/build/ica/scripts/start-intermediate-ca.sh
     cp ${SDIR}/scripts/env.sh ${SDIR}/build/ica/scripts/env.sh
+    cp ${SDIR}/scripts/file_exits.sh ${SDIR}/build/rca/scripts/file_exits.sh
+    cp ${SDIR}/scripts/file_scp.sh ${SDIR}/build/rca/scripts/file_scp.sh
 
     ########################## 打包setup ##########################
-    log "Package SETUP files"
+    log "===> Package SETUP files"
     mkdir -p ${SDIR}/build/setup/scripts
     cp ${SDIR}/setup-bootstrap.sh ${SDIR}/build/setup/setup-bootstrap.sh
     cp ${SDIR}/makeDocker.sh ${SDIR}/build/setup/makeDocker.sh
@@ -44,9 +48,11 @@ function package {
     cp ${SDIR}/scripts/setup-fabric.sh ${SDIR}/build/setup/scripts/setup-fabric.sh
     cp ${SDIR}/scripts/run-fabric.sh ${SDIR}/build/setup/scripts/run-fabric.sh
     cp ${SDIR}/scripts/env.sh ${SDIR}/build/setup/scripts/env.sh
+    cp ${SDIR}/scripts/file_exits.sh ${SDIR}/build/rca/scripts/file_exits.sh
+    cp ${SDIR}/scripts/file_scp.sh ${SDIR}/build/rca/scripts/file_scp.sh
 
     ########################## 打包orderer ##########################
-    log "Package ORDERER files"
+    log "===> Package ORDERER files"
     mkdir -p ${SDIR}/build/orderer/scripts
     cp ${SDIR}/orderer-bootstrap.sh ${SDIR}/build/orderer/orderer-bootstrap.sh
     cp ${SDIR}/makeDocker.sh ${SDIR}/build/orderer/makeDocker.sh
@@ -54,9 +60,11 @@ function package {
     cp ${SDIR}/down-images.sh ${SDIR}/build/orderer/down-images.sh
     cp ${SDIR}/scripts/start-orderer.sh ${SDIR}/build/orderer/scripts/start-orderer.sh
     cp ${SDIR}/scripts/env.sh ${SDIR}/build/orderer/scripts/env.sh
+    cp ${SDIR}/scripts/file_exits.sh ${SDIR}/build/rca/scripts/file_exits.sh
+    cp ${SDIR}/scripts/file_scp.sh ${SDIR}/build/rca/scripts/file_scp.sh
 
     ########################## 打包peer ##########################
-    log "Package PEER files"
+    log "===> Package PEER files"
     mkdir -p ${SDIR}/build/peer/scripts
     cp ${SDIR}/peer-bootstrap.sh ${SDIR}/build/peer/peer-bootstrap.sh
     cp ${SDIR}/makeDocker.sh ${SDIR}/build/peer/makeDocker.sh
@@ -64,8 +72,10 @@ function package {
     cp ${SDIR}/down-images.sh ${SDIR}/build/peer/down-images.sh
     cp ${SDIR}/scripts/start-peer.sh ${SDIR}/build/peer/scripts/start-peer.sh
     cp ${SDIR}/scripts/env.sh ${SDIR}/build/peer/scripts/env.sh
+    cp ${SDIR}/scripts/file_exits.sh ${SDIR}/build/rca/scripts/file_exits.sh
+    cp ${SDIR}/scripts/file_scp.sh ${SDIR}/build/rca/scripts/file_scp.sh
 
-    log "Construct a host configuration"
+    log "===> Construct a host configuration"
     echo
 
     # 构造host配置

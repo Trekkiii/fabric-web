@@ -25,17 +25,17 @@ function package {
 
     # sed on MacOSX does not support -i flag with a null extension. We will use
     # 't' for our back-up's extension and delete it at the end of the function
-    ARCH=`uname -s | grep Darwin`
+    local ARCH=`uname -s | grep Darwin`
     if [ "$ARCH" == "Darwin" ]; then
         OPTS="-it"
     else
         OPTS="-i"
     fi
 
-    sed $OPTS "s/ORDERER_ORGS_PLACEHOLDER/"${ORDERER_ORGS}"/g" ${SDIR}/scripts/env.sh
-    sed $OPTS "s/PEER_ORGS_PLACEHOLDER/"${PEER_ORGS}"/g" ${SDIR}/scripts/env.sh
-    sed $OPTS "s/NUM_PEERS_PLACEHOLDER/"${NUM_PEERS}"/g" ${SDIR}/scripts/env.sh
-    sed $OPTS "s/NUM_ORDERERS_PLACEHOLDER/"${NUM_ORDERERS}"/g" ${SDIR}/scripts/env.sh
+    sed $OPTS "s/ORDERER_ORGS_PLACEHOLDER/${ORDERER_ORGS}/g" ${SDIR}/scripts/env.sh
+    sed $OPTS "s/PEER_ORGS_PLACEHOLDER/${PEER_ORGS}/g" ${SDIR}/scripts/env.sh
+    sed $OPTS "s/NUM_PEERS_PLACEHOLDER/${NUM_PEERS}/g" ${SDIR}/scripts/env.sh
+    sed $OPTS "s/NUM_ORDERERS_PLACEHOLDER/${NUM_ORDERERS}/g" ${SDIR}/scripts/env.sh
 
     ########################## 打包rca ##########################
     log "===> Package RCA files"

@@ -4,6 +4,22 @@
 #
 # Apache-2.0
 
+# log a message
+function log {
+   if [ "$1" = "-n" ]; then
+      shift
+      echo -n "##### `date '+%Y-%m-%d %H:%M:%S'` $*"
+   else
+      echo "##### `date '+%Y-%m-%d %H:%M:%S'` $*"
+   fi
+}
+
+# fatal a message
+function fatal {
+   log "FATAL: $*"
+   exit 1 # 错误退出
+}
+
 function installJQ {
 
     set +e
@@ -911,20 +927,4 @@ function dowait {
     done
 
     echo ""
-}
-
-# log a message
-function log {
-   if [ "$1" = "-n" ]; then
-      shift
-      echo -n "##### `date '+%Y-%m-%d %H:%M:%S'` $*"
-   else
-      echo "##### `date '+%Y-%m-%d %H:%M:%S'` $*"
-   fi
-}
-
-# fatal a message
-function fatal {
-   log "FATAL: $*"
-   exit 1 # 错误退出
 }

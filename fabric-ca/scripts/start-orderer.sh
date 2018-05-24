@@ -18,10 +18,10 @@ function finish {
 
 set -e
 
+source $(dirname "$0")/env.sh
+
 done=false # 标记是否执行完成所有以下操作
 trap finish EXIT
-
-source $(dirname "$0")/env.sh
 
 # 登记并获取orderer节点的tls证书
 # 使用orderer节点身份登记，以获取orderer的TLS证书(使用 "tls" profile)，并保存在/tmp/tls目录（以便将证书和私钥重命名为server.crt、server.key）下

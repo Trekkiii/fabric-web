@@ -17,6 +17,8 @@ function finish {
 
 set -e
 
+source $(dirname "$0")/env.sh
+
 done=false # 标记是否执行完成所有以下操作
 trap finish EXIT
 

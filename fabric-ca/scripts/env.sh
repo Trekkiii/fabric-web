@@ -4,80 +4,19 @@
 #
 # Apache-2.0
 
-# log a message
-function log {
-   if [ "$1" = "-n" ]; then
-      shift
-      echo -n "##### `date '+%Y-%m-%d %H:%M:%S'` $*"
-   else
-      echo "##### `date '+%Y-%m-%d %H:%M:%S'` $*"
-   fi
-}
-
-# fatal a message
-function fatal {
-   log "FATAL: $*"
-   exit 1 # 错误退出
-}
-
-function installJQ {
-
-    set +e
-
-    which jq >& /dev/null
-    if [ $? -ne 0 ]; then
-#        log "Not installed jq"
-#        echo "Installing jq"
-#        # 使用-y选项会在安装过程中使用默认设置，如果默认设置为N，那么就会选择N，而不会选择y。并没有让apt-get一直选择y的选项。
-#        apt-get -y update && apt-get -y install jq
-        log "Not installed jq, Please install jq and try again!!!"
-        log ""
-        log "       sudo apt-get -y update && sudo apt-get -y install jq"
-        log ""
-        log "Good luck!~"
-        exit 1
-    fi
-
-    set -e
-}
-
-function installExpect {
-
-    set +e
-
-    which expect >& /dev/null
-    if [ $? -ne 0 ]; then
-        log "Not installed expect, Please install expect and try again!!!"
-        log ""
-        log "       sudo apt-get -y update && sudo apt-get -y install expect"
-        log ""
-        log "Good luck!~"
-        exit 1
-    fi
-
-    set -e
-}
-
-installJQ
-# 校验fabric.config配置是否是合法性JSON
-cat fabric.config | jq . >& /dev/null
-if [ $? -ne 0 ]; then
-	fatal "fabric.config isn't JSON format"
-fi
-
 FABRIC_ROOT=$GOPATH/src/github.com/hyperledger/fabric
 
 # orderer组织的名称
-ORDERER_ORGS=$(cat fabric.config | jq -r '.ORDERER_ORGS')
+ORDERER_ORGS=ORDERER_ORGS_PLACEHOLDER
 
 # peer组织的名称
-PEER_ORGS=$(cat fabric.config | jq -r '.PEER_ORGS')
+PEER_ORGS=PEER_ORGS_PLACEHOLDER
 
 # 每一个peer组织的peers数量
-NUM_PEERS=$(cat fabric.config | jq -r '.NUM_PEERS')
+NUM_PEERS=NUM_PEERS_PLACEHOLDER
 
 # 每一个orderer组织的orderer节点的数量
-NUM_ORDERERS=$(cat fabric.config | jq -r '.NUM_ORDERERS')
+NUM_ORDERERS=NUM_ORDERERS_PLACEHOLDER
 
 # 所有组织名称
 ORGS="$ORDERER_ORGS $PEER_ORGS"
@@ -927,4 +866,58 @@ function dowait {
     done
 
     echo ""
+}
+
+# log a message
+function log {
+   if [ "$1" = "-n" ]; then
+      shift
+      echo -n "##### `date '+%Y-%m-%d %H:%M:%S'` $*"
+   else
+      echo "##### `date '+%Y-%m-%d %H:%M:%S'` $*"
+   fi
+}
+
+# fatal a message
+function fatal {
+   log "FATAL: $*"
+   exit 1 # 错误退出
+}
+
+function installJQ {
+
+    set +e
+
+    which jq >& /dev/null
+    if [ $? -ne 0 ]; then
+#        log "Not installed jq"
+#        echo "Installing jq"
+#        # 使用-y选项会在安装过程中使用默认设置，如果默认设置为N，那么就会选择N，而不会选择y。并没有让apt-get一直选择y的选项。
+#        apt-get -y update && apt-get -y install jq
+        log "Not installed jq, Please install jq and try again!!!"
+        log ""
+        log "       sudo apt-get -y update && sudo apt-get -y install jq"
+        log ""
+        log "Good luck!~"
+        exit 1
+    fi
+
+    set -e
+}
+
+function installExpect {
+
+    set +e
+
+    which expect >& /dev/null
+    if [ $? -ne 0 ]; then
+        log "Not installed expect, Please install expect and try again!!!"
+        log ""
+        log "       sudo apt-get -y update && sudo apt-get -y install expect"
+        log ""
+        log "Good luck!~"
+        exit 1
+    fi
+
+    set -e
 }

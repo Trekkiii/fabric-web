@@ -14,6 +14,29 @@ cd ${SDIR}
 
 function package {
 
+    # orderer组织的名称
+    ORDERER_ORGS=$(cat fabric.config | jq '.ORDERER_ORGS')
+    # peer组织的名称
+    PEER_ORGS=$(cat fabric.config | jq '.PEER_ORGS')
+    # 每一个peer组织的peers数量
+    NUM_PEERS=$(cat fabric.config | jq -r '.NUM_PEERS')
+    # 每一个orderer组织的orderer节点的数量
+    NUM_ORDERERS=$(cat fabric.config | jq -r '.NUM_ORDERERS')
+
+    # sed on MacOSX does not support -i flag with a null extension. We will use
+    # 't' for our back-up's extension and delete it at the end of the function
+    ARCH=`uname -s | grep Darwin`
+    if [ "$ARCH" == "Darwin" ]; then
+        OPTS="-it"
+    else
+        OPTS="-i"
+    fi
+
+    sed $OPTS "s/ORDERER_ORGS_PLACEHOLDER/"${ORDERER_ORGS}"/g" ${SDIR}/scripts/env.sh
+    sed $OPTS "s/PEER_ORGS_PLACEHOLDER/"${PEER_ORGS}"/g" ${SDIR}/scripts/env.sh
+    sed $OPTS "s/NUM_PEERS_PLACEHOLDER/"${NUM_PEERS}"/g" ${SDIR}/scripts/env.sh
+    sed $OPTS "s/NUM_ORDERERS_PLACEHOLDER/"${NUM_ORDERERS}"/g" ${SDIR}/scripts/env.sh
+
     ########################## 打包rca ##########################
     log "===> Package RCA files"
     mkdir -p ${SDIR}/build/rca/scripts
@@ -115,6 +138,13 @@ function package {
 if [ -d ${SDIR}/build ]; then
     echo "Delete the original build folder"
     rm -rf ${SDIR}/build
+fi
+
+installJQ
+# 校验fabric.config配置是否是合法性JSON
+cat fabric.config | jq . >& /dev/null
+if [ $? -ne 0 ]; then
+	fatal "fabric.config isn't JSON format"
 fi
 
 package

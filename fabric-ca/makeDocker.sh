@@ -382,4 +382,11 @@ function main {
 SDIR=$(dirname "$0")
 source $SDIR/scripts/env.sh
 
+installJQ
+# 校验fabric.config配置是否是合法性JSON
+cat fabric.config | jq . >& /dev/null
+if [ $? -ne 0 ]; then
+	fatal "fabric.config isn't JSON format"
+fi
+
 main

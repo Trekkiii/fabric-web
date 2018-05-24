@@ -576,11 +576,12 @@ function fetchClientTLSCert {
 #        fatal "Remote Peer client tls certificate not found"
 #    fi
     ${SDIR}/scripts/file_exits.sh ${PEER_USER_NAME} ${PEER_IP} ${PEER_PWD} ${TLS_CLIENTCERT_REMOTE_FILE} >& ssh.log
-    if [ $? -eq 1 ]; then
+    local rs = $?
+    if [ $rs -eq 1 ]; then
         fatal "Remote Peer client tls certificate not found"
-    elif [ $? -eq 2 ]; then
+    elif [ $rs -eq 2 ]; then
         fatal "Password is wrong!~"
-    elif [ $? -ne 0 ]; then
+    elif [ $rs -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 
@@ -600,11 +601,12 @@ EOF
 #       fatal "Failed to copy client tls certificate from remote Peer"
 #    fi
     ${SDIR}/scripts/file_scp.sh ${PEER_USER_NAME} ${PEER_IP} ${PEER_PWD} ${TLS_CLIENTCERT_REMOTE_FILE} "$PWD${TLS_CLIENTCERT_FILE}" >& ssh.log
-    if [ $? -eq 1 ]; then
+    rs = $?
+    if [ $rs -eq 1 ]; then
         fatal "Failed to copy client tls certificate from remote Peer. exits?"
-    elif [ $? -eq 2 ]; then
+    elif [ $rs -eq 2 ]; then
         fatal "Password is wrong!~"
-    elif [ $? -ne 0 ]; then
+    elif [ $rs -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 
@@ -657,11 +659,12 @@ function fetchCAChain {
 #        fatal "Remote CA certificate not found"
 #    fi
     ${SDIR}/scripts/file_exits.sh ${CA_USER_NAME} ${CA_IP} ${CA_PWD} ${CACHAIN_REMOTE_FILE} >& ssh.log
-    if [ $? -eq 1 ]; then
+    local rs = $?
+    if [ $rs -eq 1 ]; then
         fatal "Remote CA certificate not found"
-    elif [ $? -eq 2 ]; then
+    elif [ $rs -eq 2 ]; then
         fatal "Password is wrong!~"
-    elif [ $? -ne 0 ]; then
+    elif [ $rs -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 
@@ -681,11 +684,12 @@ EOF
 #        fatal "Failed to copy certificate from remote CA"
 #    fi
     ${SDIR}/scripts/file_scp.sh ${CA_USER_NAME} ${CA_IP} ${CA_PWD} ${CACHAIN_REMOTE_FILE} "$PWD${CA_CHAINFILE}" >& ssh.log
-    if [ $? -eq 1 ]; then
+    rs = $?
+    if [ $rs -eq 1 ]; then
         fatal "Failed to copy certificate from remote CA. exits?"
-    elif [ $? -eq 2 ]; then
+    elif [ $rs -eq 2 ]; then
         fatal "Password is wrong!~"
-    elif [ $? -ne 0 ]; then
+    elif [ $rs -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 
@@ -729,11 +733,12 @@ function fetchOrgMSP {
 #        fatal "Remote ${ORG} MSP not found"
 #    fi
     ${SDIR}/scripts/file_exits.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteOrgMsp} >& ssh.log
-    if [ $? -eq 1 ]; then
+    local rs = $?
+    if [ $rs -eq 1 ]; then
         fatal "Remote ${ORG} MSP not found"
-    elif [ $? -eq 2 ]; then
+    elif [ $rs -eq 2 ]; then
         fatal "Password is wrong!~"
-    elif [ $? -ne 0 ]; then
+    elif [ $rs -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 
@@ -753,11 +758,12 @@ EOF
 #        fatal "Failed to copy MSP from remote 'setup'"
 #    fi
     ${SDIR}/scripts/file_scp.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteOrgMsp} ${PWD}$(dirname "$ORG_MSP_DIR") >& ssh.log
-    if [ $? -eq 1 ]; then
+    rs = $?
+    if [ $rs -eq 1 ]; then
         fatal "Failed to copy MSP from remote 'setup'. exits?"
-    elif [ $? -eq 2 ]; then
+    elif [ $rs -eq 2 ]; then
         fatal "Password is wrong!~"
-    elif [ $? -ne 0 ]; then
+    elif [ $rs -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 
@@ -798,11 +804,12 @@ function fetchChannelTx {
 #        fatal "Remote channel configuration transaction not found"
 #    fi
     ${SDIR}/scripts/file_exits.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteChannelTxFile} >& ssh.log
-    if [ $? -eq 1 ]; then
+    local rs = $?
+    if [ $rs -eq 1 ]; then
         fatal "Remote channel configuration transaction not found"
-    elif [ $? -eq 2 ]; then
+    elif [ $rs -eq 2 ]; then
         fatal "Password is wrong!~"
-    elif [ $? -ne 0 ]; then
+    elif [ $rs -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 
@@ -822,11 +829,12 @@ EOF
 #        fatal "Failed to copy channel configuration transaction from remote 'setup'"
 #    fi
     ${SDIR}/scripts/file_scp.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteChannelTxFile} "$PWD${CHANNEL_TX_FILE}" >& ssh.log
-    if [ $? -eq 1 ]; then
+    rs = $?
+    if [ $rs -eq 1 ]; then
         fatal "Failed to copy channel configuration transaction from remote 'setup'. eixts?"
-    elif [ $? -eq 2 ]; then
+    elif [ $rs -eq 2 ]; then
         fatal "Password is wrong!~"
-    elif [ $? -ne 0 ]; then
+    elif [ $rs -ne 0 ]; then
         fatal "Unknow error!~"
     fi
 

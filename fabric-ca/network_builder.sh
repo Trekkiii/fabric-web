@@ -15,13 +15,13 @@ cd ${SDIR}
 function package {
 
     # orderer组织的名称
-    ORDERER_ORGS=$(cat fabric.config | jq '.ORDERER_ORGS')
+    local ORDERER_ORGS=$(cat fabric.config | jq -r '.ORDERER_ORGS')
     # peer组织的名称
-    PEER_ORGS=$(cat fabric.config | jq '.PEER_ORGS')
+    local PEER_ORGS=$(cat fabric.config | jq -r '.PEER_ORGS')
     # 每一个peer组织的peers数量
-    NUM_PEERS=$(cat fabric.config | jq -r '.NUM_PEERS')
+    local NUM_PEERS=$(cat fabric.config | jq -r '.NUM_PEERS')
     # 每一个orderer组织的orderer节点的数量
-    NUM_ORDERERS=$(cat fabric.config | jq -r '.NUM_ORDERERS')
+    local NUM_ORDERERS=$(cat fabric.config | jq -r '.NUM_ORDERERS')
 
     # sed on MacOSX does not support -i flag with a null extension. We will use
     # 't' for our back-up's extension and delete it at the end of the function

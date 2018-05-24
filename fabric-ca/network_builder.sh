@@ -32,8 +32,8 @@ function package {
         OPTS="-i"
     fi
 
-    sed $OPTS "s/ORDERER_ORGS_PLACEHOLDER/${ORDERER_ORGS}/g" ${SDIR}/scripts/env.sh
-    sed $OPTS "s/PEER_ORGS_PLACEHOLDER/${PEER_ORGS}/g" ${SDIR}/scripts/env.sh
+    sed $OPTS "s/ORDERER_ORGS_PLACEHOLDER/\"${ORDERER_ORGS}\"/g" ${SDIR}/scripts/env.sh
+    sed $OPTS "s/PEER_ORGS_PLACEHOLDER/\"${PEER_ORGS}\"/g" ${SDIR}/scripts/env.sh
     sed $OPTS "s/NUM_PEERS_PLACEHOLDER/${NUM_PEERS}/g" ${SDIR}/scripts/env.sh
     sed $OPTS "s/NUM_ORDERERS_PLACEHOLDER/${NUM_ORDERERS}/g" ${SDIR}/scripts/env.sh
 

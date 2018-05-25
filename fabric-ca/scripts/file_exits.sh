@@ -21,7 +21,7 @@ set remote_file [lindex $argv 3] ;# 远程服务器文件
 
 set passwd_error 0
 
-spawn ssh ${remote_user}@${remote_host} "test -f ${remote_file} && echo 'File exists' || echo 'File Not exists'"
+spawn ssh ${remote_user}@${remote_host} "test -e ${remote_file} && echo 'File exists' || echo 'File Not exists'"
 
 expect {
 

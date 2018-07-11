@@ -20,7 +20,7 @@ cat << EOF
 EOF
 echo "    如果脚本找不到，会基于fabric源码编译生成二进制文件，此时需要保证\"$HOME/gopath/src/github.com/hyperledger/fabric\"源码目录存在"
 echo
-echo"    当然你也可以通过指定-d选项从网络下载该二进制文件"
+echo "    当然你也可以通过指定-d选项从网络下载该二进制文件"
 }
 
 binariesInstall() {

@@ -6,6 +6,12 @@
 
 FABRIC_ROOT=$GOPATH/src/github.com/hyperledger/fabric
 
+# zookeeper集群节点数量
+NUM_ZOOKEEPER=NUM_ZOOKEEPER_PLACEHOLDER
+
+# kafka集群节点数量
+NUM_KAFKA=NUM_KAFKA_PLACEHOLDER
+
 # orderer组织的名称
 ORDERER_ORGS=ORDERER_ORGS_PLACEHOLDER
 
@@ -204,6 +210,30 @@ function initOrgVars {
     fi
 }
 
+function initZKVars {
+
+    if [ $# -ne 1 ]; then
+        echo "Usage: initZKVars <ID>"
+        exit 1
+    fi
+
+    ZK_HOST=zookeeper$1
+    ZK_NAME=zookeeper$1
+}
+
+function initKafkaVars {
+
+    if [ $# -ne 1 ]; then
+        echo "Usage: initKafkaVars <ID>"
+        exit 1
+    fi
+
+    KAFKA_ID=$1
+
+    KAFKA_HOST=kafka${KAFKA_ID}
+    KAFKA_NAME=kafka${KAFKA_ID}
+}
+
 # initOrdererVars <NUM>
 function initOrdererVars {
 
@@ -264,6 +294,9 @@ function initPeerVars {
     PEER_LOGFILE=$LOGDIR/${PEER_NAME}.log
     PEER_SUCCESS_FILE=$LOGDIR/${PEER_NAME}.success
     PEER_FAIL_FILE=$LOGDIR/${PEER_NAME}.fail
+
+    PEER_COUCHDB_NAME=couchdb${NUM}-${ORG}
+    PEER_COUCHDB_HOST=couchdb${NUM}-${ORG}
 
     MYHOME=/opt/gopath/src/github.com/hyperledger/fabric/peer
     TLSDIR=$MYHOME/tls
@@ -555,7 +588,7 @@ EOF
 #    if [ $? -ne 0 ]; then
 #       fatal "Failed to copy client tls certificate from remote Peer"
 #    fi
-    ${SDIR}/scripts/file_scp.sh ${PEER_USER_NAME} ${PEER_IP} ${PEER_PWD} ${TLS_CLIENTCERT_REMOTE_FILE} "$PWD${TLS_CLIENTCERT_FILE}" >& ssh.log
+    ${SDIR}/scripts/file_scp.sh ${PEER_USER_NAME} ${PEER_IP} ${PEER_PWD} ${TLS_CLIENTCERT_REMOTE_FILE} "$PWD${TLS_CLIENTCERT_FILE}" "from" >& ssh.log
     rs=$?
     if [ $rs -eq 1 ]; then
         fatal "Failed to copy client tls certificate from remote Peer. exits?"
@@ -638,7 +671,7 @@ EOF
 #    if [ $? -ne 0 ]; then
 #        fatal "Failed to copy certificate from remote CA"
 #    fi
-    ${SDIR}/scripts/file_scp.sh ${CA_USER_NAME} ${CA_IP} ${CA_PWD} ${CACHAIN_REMOTE_FILE} "$PWD${CA_CHAINFILE}" >& ssh.log
+    ${SDIR}/scripts/file_scp.sh ${CA_USER_NAME} ${CA_IP} ${CA_PWD} ${CACHAIN_REMOTE_FILE} "$PWD${CA_CHAINFILE}" "from" >& ssh.log
     rs=$?
     if [ $rs -eq 1 ]; then
         fatal "Failed to copy certificate from remote CA. exits?"
@@ -712,7 +745,7 @@ EOF
 #    if [ $? -ne 0 ]; then
 #        fatal "Failed to copy MSP from remote 'setup'"
 #    fi
-    ${SDIR}/scripts/file_scp.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteOrgMsp} ${PWD}$(dirname "$ORG_MSP_DIR") >& ssh.log
+    ${SDIR}/scripts/file_scp.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteOrgMsp} ${PWD}$(dirname "$ORG_MSP_DIR") "from" >& ssh.log
     rs=$?
     if [ $rs -eq 1 ]; then
         fatal "Failed to copy MSP from remote 'setup'. exits?"
@@ -783,7 +816,7 @@ EOF
 #    if [ $? -ne 0 ]; then
 #        fatal "Failed to copy channel configuration transaction from remote 'setup'"
 #    fi
-    ${SDIR}/scripts/file_scp.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteChannelTxFile} "$PWD${CHANNEL_TX_FILE}" >& ssh.log
+    ${SDIR}/scripts/file_scp.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteChannelTxFile} "$PWD${CHANNEL_TX_FILE}" "from" >& ssh.log
     rs=$?
     if [ $rs -eq 1 ]; then
         fatal "Failed to copy channel configuration transaction from remote 'setup'. eixts?"
@@ -882,6 +915,17 @@ function log {
 function fatal {
    log "FATAL: $*"
    exit 1 # 错误退出
+}
+
+function installJQAuto {
+
+    which jq >& /dev/null
+    if [ $? -ne 0 ]; then
+        log "Not installed jq"
+        echo "Installing jq"
+        # 使用-y选项会在安装过程中使用默认设置，如果默认设置为N，那么就会选择N，而不会选择y。并没有让apt-get一直选择y的选项。
+        apt-get -y update && apt-get -y install jq
+    fi
 }
 
 function installJQ {

@@ -75,8 +75,8 @@ ${SDIR}/makeDocker.sh
 
 # 创建peer docker容器
 log "Creating docker containers $PEER_NAME ..."
-docker-compose up -d --no-deps $PEER_NAME
-
+# docker-compose up -d --no-deps $PEER_NAME
+docker-compose up -d $PEER_NAME
 
 # 等待'peer'容器启动，随后tail -f
 dowait "the docker 'peer' container to start" 60 ${SDIR}/${PEER_LOGFILE} ${SDIR}/${PEER_LOGFILE}

@@ -154,7 +154,7 @@ Profiles:
     OrgsOrdererGenesis:
         Orderer:
             # orderer type：\"solo\" 、 \"kafka\"
-            OrdererType: solo
+            OrdererType: kafka
             Addresses:" # Orderers服务地址
                 for ORG in $ORDERER_ORGS; do
                     local COUNT=1
@@ -177,10 +177,16 @@ Profiles:
                 PreferredMaxBytes: 512 KB
             Kafka:
                 # Brokers: Kafka brokers作为orderer后端
-                # NOTE: 使用IP:port表示法
-                Brokers:
-                    - 127.0.0.1:9092
-            Organizations:" # 属于orderer通道的组织
+                # Note: 使用IP:port表示法
+                Brokers:"
+            installJQAuto
+            COUNT=1
+            while [[ "$COUNT" -le $NUM_KAFKA ]]; do
+                initKafkaVars $COUNT
+                echo "                    - "$(cat /fabric.config | jq -r '.NET_CONFIG.KAFKA_CLUSTER['$((COUNT-1))'].IP')":9092"
+                COUNT=$((COUNT+1))
+            done
+            echo "            Organizations:" # 属于orderer通道的组织
                 for ORG in $ORDERER_ORGS; do
                     initOrgVars $ORG
                     echo "                - *${ORG_CONTAINER_NAME}" # 引用

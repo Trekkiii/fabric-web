@@ -16,40 +16,24 @@
 ```bash
 root@vm10-249-0-4:~/fabric-web/fabric-ca# chmod +x *.sh
 root@vm10-249-0-4:~/fabric-web/fabric-ca# 
-root@vm10-249-0-4:~/fabric-web/fabric-ca# 
 root@vm10-249-0-4:~/fabric-web/fabric-ca# chmod +x scripts/*.sh
 ```
 
-### 0. 网络拓扑
+### Z、网络拓扑
 
-通过`fabric.config`定义网络拓扑结构
+通过`fabric.config`定义网络拓扑结构。
 
-### 1.构建项目，为不同节点打包脚本
+> 💡 确认`setup`节点的IP与第一个Peer组织的第一个peer节点一致（`setup`脚本是基于第一个节点身份的），
+> 否则在执行实例化链码时报错：Timeout ***
+
+### 一、构建项目，为不同节点打包脚本
 
 ```bash
 ./network_builder.sh
 ```
 
-再正式开始前，确保你已经正确完成下列步骤执行：
+**在正式开始前，确保你已经正确完成下列步骤执行**：
 
-为了方便起见，我们拿代码中提供的示例`fabric.config`配置文件做说明：
-    
-* 将`build`目录下生成的文件夹分别拷贝到相应节点的 **_`fabric.config`配置中指定用户的指定目录_** 下；
-    
-    ```bash
-    scp -r ica ubuntu@<IP>:~/fabric/ica
-    scp -r rca  ubuntu@<IP>:~/fabric/rca
-    scp -r peer  ubuntu@<IP>:~/fabric/peer
-    scp -r orderer  ubuntu@<IP>:~/fabric/orderer
-    scp -r setup  ubuntu@<IP>:~/fabric/setup
-    ```
-    
-    > 务必将`setup`拷贝到第一个Peer组织的第一个peer节点上执行，否则在执行实例化链码时报错：Timeout...
-    
-    所有节点的目录应该类似这个样子：
-    
-    ![](./ica-tree.png)
-    
 * 每个节点都已下载所需的fabric镜像；
 
     可执行如下命令下载镜像:
@@ -58,7 +42,7 @@ root@vm10-249-0-4:~/fabric-web/fabric-ca# chmod +x scripts/*.sh
     ./down-images.sh
     ```
 
-### 2.启动CA服务
+### 二、启动CA服务
 
 对于每一个组织都要启动一个rca和ica服务。
 
@@ -118,7 +102,7 @@ root@vm10-249-0-4:~/fabric-web/fabric-ca# chmod +x scripts/*.sh
 
 这些工作脚本也已经帮我们完成了！~ ✌ 
 
-### 3. 启动setup
+### 三、启动setup
 
 setup容器用于：
 
@@ -155,15 +139,41 @@ setup-bootstrap.sh [-h] [-?] [-d]
     ~~脚本会将编译生成的`fabric-ca-server`和`fabric-ca-client`保存在`$GOPATH/bin`目录下。~~
 
 * 此外，你还需要配置当前机器的`/etc/host`，内容参见`build/host.config`。
-* 将安装的**_链码_**复制到'setup'同级目录下。
 
 如果你执行完上述，那么来启动`setup`吧！~😍
 
 ```bash
-./setup-bootstrap.sh
+sudo ./setup-bootstrap.sh
 ```
 
-### 4. 启动orderer
+### 四、启动Zookeeper 与 Kafka集群
+
+```text
+zk-kafka-bootstrap.sh <-z|-k> [-?] <ID>
+    -h|-?       获取此帮助信息
+    -z          启动zookeeper节点
+    -k          启动kafka节点
+```
+
+假设zookeeper与kafka个配置3台。那么启动脚本如下：
+
+**启动Zookeeper**：
+
+```bash
+./zk-kafka-bootstrap.sh -z 1
+./zk-kafka-bootstrap.sh -z 2
+./zk-kafka-bootstrap.sh -z 3
+```
+
+**启动Kafka**：
+
+```bash
+./zk-kafka-bootstrap.sh -k 1
+./zk-kafka-bootstrap.sh -k 2
+./zk-kafka-bootstrap.sh -k 3
+```
+
+### 五、启动orderer
 
 ```text
 orderer-bootstrap.sh [-h] [-?] <ORG> <NUM>
@@ -176,7 +186,7 @@ orderer-bootstrap.sh [-h] [-?] <ORG> <NUM>
 ./orderer-bootstrap.sh <ORG> <NUM>
 ```
 
-### 5. 启动peer
+### 六、启动peer
 
 ```text
 peer-bootstrap.sh [-h] [-?] <ORG> <NUM>
@@ -189,13 +199,14 @@ peer-bootstrap.sh [-h] [-?] <ORG> <NUM>
 ./peer-bootstrap.sh <ORG> <NUM>
 ```
 
-## TODO
-
-- orderer增加kafka集群
-- 账本存储使用couchdb
-
 ## 版本历史
 
-### v1.0.1
+### v1.1.1
 
 * 新增`expect`，免去手动输入密码的烦恼；
+
+### v1.1.2
+
+* 脚本自动分发到各个服务器
+* orderer增加kafka集群
+* 账本存储使用couchdb

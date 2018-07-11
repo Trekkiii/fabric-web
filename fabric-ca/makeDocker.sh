@@ -109,6 +109,7 @@ function writeSetupFabric {
         image: hyperledger/fabric-ca-tools
         command: /bin/bash -c '/scripts/setup-fabric.sh 2>&1 | tee /$SETUP_LOGFILE; sleep 99999'
         volumes:
+            - ./fabric.config:/fabric.config
             - ./scripts:/scripts
             - ./$DATA:/$DATA
         depends_on:"
@@ -135,6 +136,20 @@ function writeRootFabricCA {
 # 为每一个orderer和peer容器编写服务
 function writeStartFabric {
 
+    COUNT=1
+    while [[ "$COUNT" -le $NUM_ZOOKEEPER ]]; do
+        initZKVars $COUNT
+        writeZK $COUNT $NUM_ZOOKEEPER
+        COUNT=$((COUNT+1))
+    done
+
+    COUNT=1
+    while [[ "$COUNT" -le $NUM_KAFKA ]]; do
+        initKafkaVars $COUNT
+        writeKafka $COUNT $NUM_KAFKA $NUM_ZOOKEEPER
+        COUNT=$((COUNT+1))
+    done
+
     for ORG in $ORDERER_ORGS; do
         COUNT=1
         while [[ "$COUNT" -le $NUM_ORDERERS ]]; do
@@ -148,10 +163,96 @@ function writeStartFabric {
         COUNT=1
         while [[ "$COUNT" -le $NUM_PEERS ]]; do
             initPeerVars $ORG $COUNT
+            writeCouchdb
             writePeer
             COUNT=$((COUNT+1))
         done
     done
+}
+
+# Zookeeper
+function writeZK {
+
+    ZK_ID=$1
+    ZK_NUM=$2
+
+    echo -n "    $ZK_NAME:
+        container_name: $ZK_NAME
+        image: hyperledger/fabric-zookeeper
+        restart: always
+        ports:
+            - 2181:2181
+            - 2888:2888
+            - 3888:3888
+        environment:
+            - ZOO_MY_ID=$ZK_ID
+            - ZOO_SERVERS="
+    local COUNT=1
+    while [[ "$COUNT" -le $ZK_NUM ]]; do
+        initZKVars $COUNT
+        if [[ "$COUNT" -eq $ZK_NUM ]]; then
+            if [[ "$COUNT" -eq $ZK_ID ]]; then
+                echo "server."$COUNT"=0.0.0.0:2888:3888"
+            else
+                echo "server."$COUNT"=$ZK_HOST:2888:3888"
+            fi
+        else
+            if [[ "$COUNT" -eq $ZK_ID ]]; then
+                echo -n "server."$COUNT"=0.0.0.0:2888:3888 "
+            else
+                echo -n "server."$COUNT"=$ZK_HOST:2888:3888 "
+            fi
+        fi
+        COUNT=$((COUNT+1))
+    done
+    echo "        extra_hosts:"
+    genZKHosts
+    echo ""
+}
+
+# Kafka
+function writeKafka {
+
+    KAFKA_ID=$1
+    KAFKA_NUM=$2
+    ZK_NUM=$2
+
+    echo -n "    $KAFKA_NAME:
+        container_name: $KAFKA_NAME
+        image: hyperledger/fabric-kafka
+        restart: always
+        hostname: $KAFKA_HOST
+        ports:
+            - 9092:9092
+        environment:
+            - KAFKA_MESSAGE_MAX_BYTES=103809024 # 99 * 1024 * 1024 B
+            - KAFKA_REPLICA_FETCH_MAX_BYTES=103809024 # 99 * 1024 * 1024 B
+            - KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE=false
+            - KAFKA_BROKER_ID=$KAFKA_ID
+            - KAFKA_MIN_INSYNC_REPLICAS=2
+            - KAFKA_DEFAULT_REPLICATION_FACTOR=3
+            - KAFKA_ZOOKEEPER_CONNECT="
+    local COUNT=1
+    while [[ "$COUNT" -le $ZK_NUM ]]; do
+        initZKVars $COUNT
+        if [[ "$COUNT" -eq $ZK_NUM ]]; then
+            echo "$ZK_HOST:2181"
+        else
+            echo -n "$ZK_HOST:2181,"
+        fi
+        COUNT=$((COUNT+1))
+    done
+    echo "        depends_on:"
+    COUNT=1
+    while [[ "$COUNT" -le $ZK_NUM ]]; do
+        initZKVars $COUNT
+        echo "            - $ZK_NAME"
+        COUNT=$((COUNT+1))
+    done
+    echo "        extra_hosts:"
+    genZKHosts
+    genKafkaHosts
+    echo ""
 }
 
 # Orderer容器服务
@@ -181,6 +282,10 @@ function writeOrderer {
             - ORDERER_GENERAL_TLS_CLIENTROOTCAS=[$CA_CHAINFILE]
             - ORDERER_GENERAL_LOGLEVEL=debug
             - ORDERER_DEBUG_BROADCASTTRACEDIR=$LOGDIR
+            # kafka
+            - ORDERER_KAFKA_RETRY_SHORTINTERVAL=1s
+            - ORDERER_KAFKA_RETRY_SHORTTOTAL=30s
+            - ORDERER_KAFKA_VERBOSE=true
             - ORDERER_HOME=$MYHOME
             - ORDERER_HOST=$ORDERER_HOST
             - ORDERER_LOGFILE=$ORDERER_LOGFILE
@@ -192,15 +297,44 @@ function writeOrderer {
         volumes:
             - ./scripts:/scripts
             - ./$DATA:/$DATA
-        depends_on:
-            - setup
-        ports:
+        depends_on:"
+        COUNT=1
+        while [[ "$COUNT" -le $ZK_NUM ]]; do
+            initZKVars $COUNT
+            echo "            - $ZK_NAME"
+            COUNT=$((COUNT+1))
+        done
+        COUNT=1
+        while [[ "$COUNT" -le $KAFKA_NUM ]]; do
+            initKafkaVars $COUNT
+            echo "            - $KAFKA_NAME"
+            COUNT=$((COUNT+1))
+        done
+        echo "        ports:
             - 7050:7050
         extra_hosts:"
+        genKafkaHosts
         genCAHosts
         genOrdererHosts
         genPeerHosts
         echo ""
+}
+
+function writeCouchdb {
+
+    echo "    $PEER_COUCHDB_NAME:
+        container_name: $PEER_COUCHDB_NAME
+        image: hyperledger/fabric-couchdb
+        # Populate the COUCHDB_USER and COUCHDB_PASSWORD to set an admin user and password
+        # for CouchDB.  This will prevent CouchDB from operating in an "Admin Party" mode.
+        environment:
+            - COUCHDB_USER=
+            - COUCHDB_PASSWORD=
+        # Comment/Uncomment the port mapping if you want to hide/expose the CouchDB service,
+        # for example map it to utilize Fauxton User Interface in dev environments.
+        ports:
+            - 5984:5984"
+    echo ""
 }
 
 # Peer容器服务
@@ -239,6 +373,14 @@ function writePeer {
             - CORE_PEER_GOSSIP_ORGLEADER=false
             - CORE_PEER_GOSSIP_EXTERNALENDPOINT=$PEER_HOST:7051 # 节点被组织外节点感知时的地址
             - CORE_PEER_GOSSIP_SKIPHANDSHAKE=true
+            # couchdb
+            - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+            - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=$PEER_COUCHDB_HOST:5984
+            # The CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME and CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD
+            # provide the credentials for ledger to connect to CouchDB.  The username and password must
+            # match the username and password set for the associated CouchDB.
+            - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=
+            - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=
             - PEER_NAME=$PEER_NAME
             - PEER_HOME=$MYHOME
             - PEER_HOST=$PEER_HOST
@@ -259,12 +401,13 @@ function writePeer {
             - ./$DATA:/$DATA
             - /var/run:/host/var/run
         depends_on:
-            - setup
+            - $PEER_COUCHDB_NAME
         ports:
             - 7051:7051
             - 7052:7052
             - 7053:7053
         extra_hosts:"
+        genCouchdbHosts
         genCAHosts
         genOrdererHosts
         genPeerHosts
@@ -326,6 +469,24 @@ function genCAHosts {
     done
 }
 
+function genZKHosts {
+    COUNT=1
+    while [[ "$COUNT" -le $NUM_ZOOKEEPER ]]; do
+        initZKVars $COUNT
+        echo "            - \"${ZK_HOST}:"$(cat fabric.config | jq -r '.NET_CONFIG.ZOOKEEPER_CLUSTER['$((COUNT-1))'].IP')"\""
+        COUNT=$((COUNT+1))
+    done
+}
+
+function genKafkaHosts {
+    COUNT=1
+    while [[ "$COUNT" -le $NUM_KAFKA ]]; do
+        initKafkaVars $COUNT
+        echo "            - \"${KAFKA_HOST}:"$(cat fabric.config | jq -r '.NET_CONFIG.KAFKA_CLUSTER['$((COUNT-1))'].IP')"\""
+        COUNT=$((COUNT+1))
+    done
+}
+
 function genOrdererHosts {
     local ORG
     for ORG in $ORDERER_ORGS; do
@@ -336,6 +497,11 @@ function genOrdererHosts {
             COUNT=$((COUNT+1))
         done
     done
+}
+
+function genCouchdbHosts {
+
+    echo "            - \"${PEER_COUCHDB_HOST}:"$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.PEERS['$((COUNT-1))'].COUCHDB_IP')"\""
 }
 
 function genPeerHosts {

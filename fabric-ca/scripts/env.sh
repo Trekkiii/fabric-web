@@ -1200,10 +1200,21 @@ function joinChannelWithRetry {
 function installChaincode {
 
     CC_VERSION=$1
+    IS_VALID=$2
+    : ${IS_VALID:="false"}
 
     switchToAdminIdentity
     log "Installing chaincode on $PEER_HOST ..."
-    peer chaincode install -n mycc -v $CC_VERSION -p github.com/hyperledger/fabric-web/chaincode/go/chaincode_example02
+    peer chaincode install -n mycc -v $CC_VERSION -p github.com/hyperledger/fabric-web/chaincode/go/chaincode_example02 2>&1 | tee log.txt
+    res=$?
+    if [ $res -ne 0 ]; then
+        VALUE=$(cat log.txt | awk '/chaincode error/ {print $(NF-1)$NF}')
+        if [ $? -eq 0 -a "$VALUE" == "mycc.2.0exists" ]; then
+            log "chaincode 'mycc.2.0' is already install"
+        else
+            fatal "install of chaincode 'mycc.2.0' failed"
+        fi
+    fi
 }
 
 function chaincodeQuery {

@@ -96,11 +96,17 @@ Organizations:"
 
 function genCerts () {
 
-    log "========= 从远程CA服务端获取新Peer组织的TLS CAChain证书 ========="
-    # 1. 从远程CA服务端获取新组织Peer组织的TLS CAChain证书，以执行：
-    #       向新组织的CA服务端登记CA管理员身份，切换到CA管理员身份，以拥有足够的权限来进行注册新Peer组织相关的用户实体（step0）
-    initOrgVars $NEW_ORG
-    fetchCAChain $NEW_ORG $CA_CHAINFILE # 从远程CA服务端获取CAChain证书
+    log "========= 从远程CA服务端获取所有Peer组织的TLS CAChain证书 ========="
+    # 1. 从远程CA服务端获取所有Peer组织的TLS CAChain证书，以执行：
+    #       新组织：
+    #               向新组织的CA服务端登记CA管理员身份，切换到CA管理员身份，以拥有足够的权限来进行注册新Peer组织相关的用户实体（step0）
+    #       原有组织：
+    #               用于更新应用通道（step1 - fetchChannelConfig => getTLSCertKey）
+    for ORG in $PEER_ORGS; do
+        initOrgVars $ORG
+        # 从远程CA服务端获取CAChain证书
+        fetchCAChain $ORG $CA_CHAINFILE
+    done
 
     # 2. 从远程CA服务端获取Orderer组织的TLS CAChain证书
     #       以执行连接orderer节点获取配置区块和创世区块时使用（step1 - peer channel fetch config；step2 - peer channel fetch 0）
@@ -297,6 +303,7 @@ docker-compose up -d --no-deps cli
 res=$?
 if [ $res -ne 0 ]; then
     echo "ERROR !!!! Cli container failed to start"
+    docker logs -f cli
     exit 1
 fi
 

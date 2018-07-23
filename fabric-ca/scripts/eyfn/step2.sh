@@ -61,10 +61,10 @@ set +x
 set -e
 verifyResult $res "Fetching config block from orderer has Failed"
 
-echo "===================== Having peer0.org3 join the channel ===================== "
+echo "===================== Having $PEER_NAME join the channel ===================== "
 # 切换到peer组织的管理员身份，然后加入应用通道
 joinChannelWithRetry ${NEW_ORG} ${PEER_NUM}
-echo "===================== peer0.org3 joined the channel \"$CHANNEL_NAME\" ===================== "
+echo "===================== $PEER_NAME joined the channel \"$CHANNEL_NAME\" ===================== "
 
 # TODO 为新Peer组织更新锚节点？如何更新？
 
@@ -94,7 +94,7 @@ switchToAdminIdentity
 set -x
 set +e
 makePolicy
-peer chaincode upgrade -C $CHANNEL_NAME -n mycc -v 2.0 -c '{"Args":[]}' -P "$POLICY" $ORDERER_CONN_ARGS  >&log.txt
+peer chaincode upgrade -C $CHANNEL_NAME -n mycc -v 2.0 -c '{"Args":["init","a","90","b","210"]}' -P "$POLICY" $ORDERER_CONN_ARGS  >&log.txt
 res=$?
 set +x
 set -e
@@ -122,5 +122,5 @@ switchToUserIdentity
 chaincodeQuery 80
 
 echo
-echo "========= Got Org3 halfway onto your first network ========= "
+echo "========= Got ${NEW_ORG} halfway onto your first network ========= "
 echo

@@ -22,6 +22,10 @@ network_builder.sh [-e] <ORG>
 ./network_builder.sh -e org2
 ```
 
+### 三、配置hosts
+
+为了避免网络访问不同的情况，请确保及时更新每台服务器的`/etc/host`，内容参见`build/host.config`。
+
 ### 三、启动CA服务
 
 ##### (1). rca(root ca)
@@ -86,4 +90,31 @@ eyfn_builder.sh [-h] [-d] [-c <NUM_PEERS>] [-o <ORDERER_ORG>] [-n <ORDERER_NUM>]
 
 ```bash
 ./eyfn_builder.sh -c 5 -o org0 -n 1 org2
+```
+
+如果你看到如下日志，那么恭喜你，可以进行下一步了：
+
+```text
+##### 2018-07-23 17:16:32 Successfully build the environment needed to join the new organization
+##### 2018-07-23 17:16:32 Now you can run the do-join script to start the new organization node.
+```
+
+### 五、启动Peer
+
+```bash
+eyfn-bootstrap.sh [-h] [-c <NUM_PEERS>] [-o <ORDERER_ORG>] [-n <ORDERER_NUM>] <NEW_ORG> <NUM>
+    -h|-?               获取此帮助信息
+    -c <NUM_PEERS>      加入的新Peer组织的peer节点数量，默认为fabric.config中配置的NUM_PEERS
+    -o <ORDERER_ORG>    Orderer组织名称，默认为第一个Orderer组织
+    -n <ORDERER_NUM>    Orderer节点的索引，默认值为1
+    <NEW_ORG>           启动的新Peer组织的名称
+    <NUM>               启动的新Peer组织的节点索引
+```
+
+> !!!注意：此步是基于上一步生成的证书文件来执行的，所以请确保正确的执行了上一步操作。
+
+此外，上一步只需要执行一次即可，然后你就可以共享同一份`data`目录，通过修改`NUM`参数，在多台服务器上启动多个新组织的Peer节点。
+
+```bash
+./eyfn-bootstrap.sh -c 5 -o org0 -n 1  org2 1
 ```

@@ -77,7 +77,7 @@ jq -s '.[0] * {"channel_group":{"groups":{"Application":{"groups": {"Org3MSP":.[
 createConfigUpdate ${CHANNEL_NAME} config.json modified_config.json ${NEW_ORG}_update_in_envelope.pb
 
 echo
-echo "========= Config transaction to add org3 to network created ===== "
+echo "========= Config transaction to add ${NEW_ORG} to network created ===== "
 echo
 
 echo "Signing config transaction"

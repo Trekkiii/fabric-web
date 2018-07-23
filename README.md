@@ -222,6 +222,8 @@ root@vm10-249-0-4:~/fabric-web/fabric-ca# chmod +x scripts/eyfn/*.sh
  
  * 支持动态新增组织
  
- ## BUGS
+ ## TODO
  
- * network_builder导致重写的env.sh，导致其不可再次复用。
+ * network_builder导致重写的env.sh，导致其不可再次复用；
+ * 支持通过`fabric.config`配置是否启用中间层CA；
+ * 动态新增组织，启动Peer调用链码验证后，应恢复数据至初始状态，以为后续启动多个节点做准备；

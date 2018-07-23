@@ -80,13 +80,13 @@ function distriSetup {
     ${SDIR}/scripts/file_scp.sh ${SETUP_USER} ${SETUP_IP} ${SETUP_PWD} ${SETUP_REMOTE_PATH} ${SETUP_PATH} "to"
 
     # 链码
-    local chaincode_remote_path=$SETUP_REMOTE_PATH"/../chaincode"
-    echo "Delete remote ${SETUP_IP} file ${chaincode_remote_path}"
+    local CHAINCODE_REMOTE_PATH=$SETUP_REMOTE_PATH"/../chaincode"
+    echo "Delete remote ${SETUP_IP} file ${CHAINCODE_REMOTE_PATH}"
     # 删除远程服务器文件
-    ${SDIR}/scripts/file_delete.sh ${SETUP_USER} ${SETUP_IP} ${SETUP_PWD} ${chaincode_remote_path}
+    ${SDIR}/scripts/file_delete.sh ${SETUP_USER} ${SETUP_IP} ${SETUP_PWD} ${CHAINCODE_REMOTE_PATH}
     echo "Copy file ${CHAINCODE_PATH} to remote ${SETUP_IP}"
     # 拷贝文件到远程服务器
-    ${SDIR}/scripts/file_scp.sh ${SETUP_USER} ${SETUP_IP} ${SETUP_PWD} ${chaincode_remote_path} ${CHAINCODE_PATH} "to"
+    ${SDIR}/scripts/file_scp.sh ${SETUP_USER} ${SETUP_IP} ${SETUP_PWD} ${CHAINCODE_REMOTE_PATH} ${CHAINCODE_PATH} "to"
 }
 
 function distriZK {
@@ -182,6 +182,7 @@ function distriEYFN {
     local ORG=$1
 
     local EYFN_PATH=./build/eyfn
+    local CHAINCODE_PATH=../chaincode
 
     set +e  # 不强制要求每个节点都可访问，可以预设，后面需要的时候再修改为对应的ip
     COUNT=1
@@ -197,6 +198,15 @@ function distriEYFN {
         echo "Copy file ${EYFN_PATH} to remote ${PEER_IP}"
         # 拷贝文件到远程服务器
         ${SDIR}/scripts/file_scp.sh ${PEER_USER} ${PEER_IP} ${PEER_PWD} ${PEER_REMOTE_PATH} ${EYFN_PATH} "to"
+
+        # 链码
+        local CHAINCODE_REMOTE_PATH=$PEER_REMOTE_PATH"/../chaincode"
+        echo "Delete remote ${PEER_IP} file ${CHAINCODE_REMOTE_PATH}"
+        # 删除远程服务器文件
+        ${SDIR}/scripts/file_delete.sh ${PEER_USER} ${PEER_IP} ${PEER_PWD} ${CHAINCODE_REMOTE_PATH}
+        echo "Copy file ${CHAINCODE_PATH} to remote ${PEER_IP}"
+        # 拷贝文件到远程服务器
+        ${SDIR}/scripts/file_scp.sh ${PEER_USER} ${PEER_IP} ${PEER_PWD} ${CHAINCODE_REMOTE_PATH} ${CHAINCODE_PATH} "to"
 
         COUNT=$((COUNT+1))
     done

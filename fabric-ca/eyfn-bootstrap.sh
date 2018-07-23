@@ -137,5 +137,5 @@ if [ $res -ne 0 ]; then
     exit 1
 fi
 
-docker exec cli /scripts/eyfn/step2.sh -o ${ORDERER_ORG} -n ${ORDERER_NUM} ${CHANNEL_NAME} ${NEW_ORG} ${NUM} ${LANGUAGE}
+docker exec cli /scripts/eyfn/step2.sh -o ${ORDERER_ORG} -n ${ORDERER_NUM} ${CHANNEL_NAME} ${NEW_ORG} ${NUM}
 docker logs -f cli

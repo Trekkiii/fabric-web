@@ -28,11 +28,12 @@ startRun() {
 
     docker-compose up -d --no-deps run
 
+    tail -f ${SDIR}/${RUN_SUMFILE}&
+    TAIL_PID=$!
+
     # 等待'run'容器启动，随后tail -f run.sum
     dowait "the docker 'run' container to start" 60 ${SDIR}/${RUN_LOGFILE} ${SDIR}/${RUN_SUMFILE}
 
-    tail -f ${SDIR}/${RUN_SUMFILE}&
-    TAIL_PID=$!
     # 等待'run'容器执行完成
     while true; do
         if [ -f ${SDIR}/${RUN_SUCCESS_FILE} ]; then

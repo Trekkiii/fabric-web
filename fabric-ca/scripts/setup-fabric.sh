@@ -133,7 +133,7 @@ function enrollCAAdmin {
     # 向所有CA服务端登记CA管理员身份、注册所有Orderer相关的用户实体，以及注册所有Peer相关的用户实体时使用
     export FABRIC_CA_CLIENT_TLS_CERTFILES=$CA_CHAINFILE
 
-    # 使用初始化中间层CA指定的用户名和密码来登记CA管理员身份
+    # 使用初始化CA时指定的用户名和密码来登记CA管理员身份
     fabric-ca-client enroll -d -u https://$CA_ADMIN_USER_PASS@$CA_HOST:7054
 }
 
@@ -334,9 +334,11 @@ function main {
 
     # 为每一个组织向CA服务端申请根证书，并保存到/${DATA}/orgs/${ORG}/msp
     # 如果ADMINCERTS为true，我们需要登记上述注册的身份（组织管理员）并将证书保存到/${DATA}/orgs/${ORG}/msp/admincerts
-    getCACerts
-
     # !!! 构建通道Artifacts需要获取组织的根证书，因为configtx.yaml文件中指定了组织的MSPDir !!!
+    for ORG in $ORGS; do
+        getCACerts $ORG
+    done
+
     # 构建通道Artifacts（包括：创世区块、应用通道配置交易文件、锚节点配置更新交易文件）
     makeConfigTxYaml
     generateChannelArtifacts

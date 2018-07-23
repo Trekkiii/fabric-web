@@ -21,26 +21,23 @@ function main {
     logr "The docker 'run' container has started"
 
     log "Get the CLI client certificate and private key used for tls client authentication from the CA ..."
-    # 脚本使用到了 ORDERER_CONN_ARGS，其开启了客户端tls验证，需要获取每个peer节点的tls证书和私钥
+    # 当前脚本使用到了 ORDERER_CONN_ARGS，其开启了客户端tls验证，需要获取每个peer节点的tls证书和私钥
     for ORG in $PEER_ORGS; do
 
         initOrgVars $ORG
         # 此配置针对于run为指定组织向CA服务端申请根证书使用
-        export FABRIC_CA_CLIENT_TLS_CERTFILES=$PWD$CA_CHAINFILE
+        export FABRIC_CA_CLIENT_TLS_CERTFILES=$CA_CHAINFILE
 
         COUNT=1
         while [[ "$COUNT" -le $NUM_PEERS ]]; do
             initPeerVars $ORG $COUNT
             # Generate client TLS cert and key pair for the peer CLI
             # 登记并获取peer节点的tls证书
-            # /$DATA/tls/$PEER_NAME-cli-client.crt
-            # /$DATA/tls/$PEER_NAME-cli-client.key
-            fabric-ca-client enroll -d --enrollment.profile tls -u https://$PEER_NAME_PASS@$CA_HOST:7054 -M $PWD/tmp/tls --csr.hosts $PEER_NAME
+            # /$DATA/tls/$PEER_NAME-client.crt
+            # /$DATA/tls/$PEER_NAME-client.key
 
-            mkdir -p $PWD/$DATA/tls || true
-            cp $PWD/tmp/tls/signcerts/* $PWD/$DATA/tls/$PEER_NAME-cli-client.crt
-            cp $PWD/tmp/tls/keystore/* $PWD/$DATA/tls/$PEER_NAME-cli-client.key
-            rm -rf $PWD/tmp/tls
+            ENROLLMENT_URL=https://$PEER_NAME_PASS@$CA_HOST:7054
+            getTLSCertKey $PEER_NAME $CORE_PEER_TLS_CLIENTCERT_FILE $CORE_PEER_TLS_CLIENTKEY_FILE
 
             COUNT=$((COUNT+1))
         done
@@ -51,13 +48,13 @@ function main {
     #
     # read
     #   -a:将内容读入到数组中
-    #   -r:在参数输入中，我们可以使用’\’表示没有输入完，换行继续输入，如果我们需要行最后的’\’作为有效的字符，可以通过-r来进行。此外在输入字符中，我们希望\n这类特殊字符生效，也应采用-r选项。
-    #   -n:用于限定最多可以有多少字符可以作为有效读入。例如read –n 4 value1 value2，如果我们试图输入12 34，则只有前面有效的12 3，作为输入，实际上在你输入第4个字符'3'后，就自动结束输入。这里结果是value为12，value2为3。
+    #   -r:在参数输入中，我们可以使用'\'表示没有输入完，换行继续输入，如果我们需要行最后的'\'作为有效的字符，可以通过-r来进行。此外在输入字符中，我们希望'\n'这类特殊字符生效，也应采用-r选项。
+    #   -n:用于限定最多可以有多少字符可以作为有效读入。例如read -n 4 value1 value2，如果我们试图输入12 34，则只有前面有效的12 3，作为输入，实际上在你输入第4个字符'3'后，就自动结束输入。这里结果是value1为12，value2为3。
     IFS=', ' read -r -a OORGS <<< "$ORDERER_ORGS"
 
     # 将 ORDERER_PORT_ARGS 设置为与第一个orderer组织的第一个orderer节点进行通信所需的参数
     initOrdererVars ${OORGS[0]} 1
-    # 连接Orderer端点的连接属性
+    # Orderer端点的连接属性
     #       -o, --orderer string    Orderer服务地址
     #       --tls    在与Orderer端点通信时使用TLS
     #       --cafile string     Orderer节点的TLS证书，PEM格式编码，启用TLS时有效
@@ -97,7 +94,7 @@ function main {
         while [[ "$COUNT" -le $NUM_PEERS ]]; do
             initPeerVars $ORG $COUNT
             # 切换到peer组织的管理员身份，然后安装链码
-            installChaincode
+            installChaincode 1.0
             COUNT=$((COUNT+1))
         done
     done
@@ -177,69 +174,6 @@ function joinChannel {
         COUNT=$((COUNT+1))
         sleep 1
     done
-}
-
-# 切换到peer组织的管理员身份，然后安装链码
-function installChaincode {
-
-    switchToAdminIdentity
-    logr "Installing chaincode on $PEER_HOST ..."
-    peer chaincode install -n mycc -v 1.0 -p github.com/hyperledger/fabric-web/chaincode/go/chaincode_example02
-}
-
-# 链码实例化策略
-function makePolicy {
-
-    # NAME=liucl
-    # echo "My Name is '${NAME}'" -> My Name is 'liucl'
-    # echo My Name is '${NAME}' -> My Name is ${NAME}
-
-    POLICY="OR("
-    local COUNT=0
-
-    for ORG in $PEER_ORGS; do
-        if [ $COUNT -ne 0 ]; then
-            POLICY="${POLICY}," # 拼接逗号
-        fi
-
-        initOrgVars $ORG
-        POLICY="${POLICY}'${ORG_MSP_ID}.member'"
-        COUNT=$((COUNT+1))
-    done
-
-    POLICY="${POLICY})"
-    log "policy: $POLICY"
-}
-
-function chaincodeQuery {
-
-    if [ $# -ne 1 ]; then
-        fatalr "Usage: chaincodeQuery <expected-value>"
-    fi
-
-    set +e
-
-    logr "Querying chaincode in the channel '$CHANNEL_NAME' on the peer '$PEER_HOST' ..."
-
-    local rc=1
-    local starttime=$(date +%s)
-
-    # Continue to poll until we get a successful response or reach QUERY_TIMEOUT
-    while test "$(($(date +%s)-starttime))" -lt "$QUERY_TIMEOUT"; do
-        sleep 1
-        peer chaincode query -C $CHANNEL_NAME -n mycc -c '{"Args":["query","a"]}' >& log.txt
-        VALUE=$(cat log.txt | awk '/Query Result/ {print $NF}')
-        if [ $? -eq 0 -a "$VALUE" = "$1" ]; then
-            logr "Query of channel '$CHANNEL_NAME' on peer '$PEER_HOST' was successful"
-            set -e
-            return 0
-        fi
-        echo -n "."
-    done
-
-    cat log.txt
-    cat log.txt >> $RUN_SUMFILE
-    fatalr "Failed to query channel '$CHANNEL_NAME' on peer '$PEER_HOST'; expected value was $1 and found $VALUE"
 }
 
 function logr {

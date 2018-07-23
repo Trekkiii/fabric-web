@@ -4,23 +4,9 @@
 #
 # Apache-2.0
 
-function finish {
-
-    if [ "$done" = true ]; then
-        log "See $ROOT_CA_LOGFILE for more details"
-        touch /$ROOT_CA_SUCCESS_FILE
-    else
-        log "Tests did not complete successfully; see $ROOT_CA_LOGFILE for more details"
-        touch /$ROOT_CA_FAIL_FILE
-    fi
-}
-
 set -e
 
 source $(dirname "$0")/env.sh
-
-done=false # 标记是否执行完成所有以下操作
-trap finish EXIT
 
 # 初始化根CA
 # -b 指定root CA服务启动的用户名和密码，这里使用root CA管理员
@@ -48,5 +34,3 @@ sed -i "/affiliations:/a \\   $aff" \
 
 # Start the root CA
 fabric-ca-server start
-
-done=true

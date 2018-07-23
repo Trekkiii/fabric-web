@@ -6,11 +6,18 @@
 #
 # 启动orderer
 
+function finish {
+
+    kill -9 $TAIL_PID
+}
+
+trap finish EXIT
+
 function printHelp {
 
 cat << EOF
     使用方法:
-        orderer-bootstrap.sh [-h] [-?] <ORG> <NUM>
+        orderer-bootstrap.sh [-h] <ORG> <NUM>
             -h|-?       获取此帮助信息
             <ORG>       启动的orderer组织的名称
             <NUM>       启动的orderer组织的节点索引
@@ -20,7 +27,7 @@ EOF
 
 set -e
 
-while getopts "h?" opt; do
+while getopts "h" opt; do
     case "$opt" in
         h|\?)
             printHelp
@@ -67,8 +74,8 @@ refreshData
 fetchCAChain $ORG $CA_CHAINFILE
 # 从'setup'节点获取创世区块
 fetchChannelTx ${GENESIS_BLOCK_FILE}
-# 从'setup'节点获取组织的MSP
-fetchOrgMSP $ORG
+# 从'setup'节点获取组织的Admin证书
+fetchOrgAdmin $ORG
 
 # 创建docker-compose.yml文件
 ${SDIR}/makeDocker.sh
@@ -82,16 +89,8 @@ dowait "the docker 'orderer' container to start" 60 ${SDIR}/${ORDERER_LOGFILE} $
 
 tail -f ${SDIR}/${ORDERER_LOGFILE}&
 TAIL_PID=$!
-sleep 5
 # 等待'orderer'容器执行完成
-while true; do
-    if [ -f ${SDIR}/${ORDERER_SUCCESS_FILE} ]; then
-        kill -9 $TAIL_PID
-        exit 0
-    elif [ -f ${SDIR}/${ORDERER_FAIL_FILE} ]; then
-        kill -9 $TAIL_PID
-        exit 1
-    else
-        sleep 1
-    fi
-done
+# Usage: waitPort <what> <timeoutInSecs> <errorLogFile> <host> <port>
+waitPort "Orderer $ORDERER_HOST to start" 90 $ORDERER_LOGFILE $ORDERER_HOST 7050
+sleep 5
+exit 0

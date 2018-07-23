@@ -42,6 +42,15 @@ CHANNEL_TX_FILE=/$DATA/channel.tx
 # 应用通道的名称
 CHANNEL_NAME=mychannel
 
+# 使用golang作为链码的开发语言
+LANGUAGE=golang
+# tr [OPTION]... SET1 [SET2]，将SET1中字符用SET2对应位置的字符进行替换
+# tr [:upper:] [:lower:]，将大写转为小写
+# -t, –truncate-set1 先删除第一字符集较第二字符集多出的字符
+# echo "a1213fdasf" | tr -t "afd123" "AFO"    ->  A1213FOAsF
+# echo "a1213fdasf" | tr "afd123" "AFO"     ->    AOOOOFOAsF
+LANGUAGE=`echo "$LANGUAGE" | tr [:upper:] [:lower:]`
+
 # 查询超时，单位秒
 QUERY_TIMEOUT=15
 
@@ -89,6 +98,9 @@ MARCH=`uname -m` # Set MARCH variable i.e ppc64le,s390x,x86_64,i386
 : ${CA_TAG:="$MARCH-$CA_VERSION"}
 : ${FABRIC_TAG:="$MARCH-$VERSION"}
 : ${THIRDPARTY_TAG:="$MARCH-$THIRDPARTY_IMAGE_VERSION"}
+
+BINARY_FILE=hyperledger-fabric-${ARCH}-${VERSION}.tar.gz
+CA_BINARY_FILE=hyperledger-fabric-ca-${ARCH}-${CA_VERSION}.tar.gz
 
 # 删除所有fabric相关的容器
 function removeFabricContainers {
@@ -146,7 +158,7 @@ function initOrgVars {
         exit 1
     fi
 
-    ORG=$1
+    local ORG=$1
 
     export FABRIC_CA_CLIENT_ID_AFFILIATION=$ORG
 
@@ -160,8 +172,9 @@ function initOrgVars {
     # MSP
     ORG_MSP_ID=${ORG}MSP
     ORG_MSP_DIR=/${DATA}/orgs/${ORG}/msp
-    ORG_ADMIN_CERT=${ORG_MSP_DIR}/admincerts/cert.pem # /${DATA}/orgs/${ORG}/msp/admincerts/cert.pem
-    ORG_ADMIN_HOME=/${DATA}/orgs/${ORG}/admin # /${DATA}/orgs/${ORG}/admin
+#    ORG_ADMIN_CERT=${ORG_MSP_DIR}/admincerts/cert.pem # /${DATA}/orgs/${ORG}/msp/admincerts/cert.pem
+    ORG_ADMIN_HOME=/${DATA}/orgs/${ORG}/admin
+    ORG_ADMIN_CERT=${ORG_ADMIN_HOME}/msp/signcerts/cert.pem
 
     # 根CA
     ROOT_CA_HOST=rca-${ORG}
@@ -234,7 +247,7 @@ function initKafkaVars {
     KAFKA_NAME=kafka${KAFKA_ID}
 }
 
-# initOrdererVars <NUM>
+# initOrdererVars <ORG> <NUM>
 function initOrdererVars {
 
     if [ $# -ne 2 ]; then
@@ -243,6 +256,7 @@ function initOrdererVars {
     fi
 
     initOrgVars $1
+    ORG=$1
     NUM=$2
 
     ORDERER_HOST=orderer${NUM}-${ORG}
@@ -285,6 +299,7 @@ function initPeerVars {
     fi
 
     initOrgVars $1
+    ORG=$1
     NUM=$2
 
     PEER_HOST=peer${NUM}-${ORG}
@@ -319,8 +334,8 @@ function initPeerVars {
     export CORE_PEER_TLS_ENABLED=true
     export CORE_PEER_TLS_ROOTCERT_FILE=$CA_CHAINFILE # TLS开启时指定信任的根CA证书位置
     export CORE_PEER_TLS_CLIENTAUTHREQUIRED=true # 是否启用客户端验证
-    export CORE_PEER_TLS_CLIENTCERT_FILE=/$DATA/tls/$PEER_NAME-cli-client.crt # Peer节点的PEM编码的X509公钥文件(代表peer用户身份)，用于客户端验证
-    export CORE_PEER_TLS_CLIENTKEY_FILE=/$DATA/tls/$PEER_NAME-cli-client.key # Peer节点的PEM编码的私钥文件(代表peer用户身份)，用于客户端验证
+    export CORE_PEER_TLS_CLIENTCERT_FILE=/$DATA/tls/$PEER_NAME-client.crt # Peer节点的PEM编码的X509公钥文件(代表peer用户身份)，用于客户端验证
+    export CORE_PEER_TLS_CLIENTKEY_FILE=/$DATA/tls/$PEER_NAME-client.key # Peer节点的PEM编码的私钥文件(代表peer用户身份)，用于客户端验证
     export CORE_PEER_PROFILE_ENABLED=true
     # gossip variables
     export CORE_PEER_GOSSIP_USELEADERELECTION=true
@@ -372,7 +387,7 @@ function switchToAdminIdentity {
     export CORE_PEER_MSPCONFIGPATH=$ORG_ADMIN_HOME/msp # /${DATA}/orgs/${ORG}/admin/msp
 
     # 2. 登记管理员身份获取证书
-    getAdminCert
+    getAdminCert $ORG_ADMIN_HOME $ORG_MSP_DIR
 }
 
 # 切换到peer组织的普通用户身份，如果之前没有登记，则登记。
@@ -389,15 +404,46 @@ function switchToUserIdentity {
     getUserCert
 }
 
+# 当启用ADMINCERTS时，将组织的管理员证书拷贝到targetAdminDir目录
+# targetAdminDir：
+#       对于orderer节点：/etc/hyperledger/orderer/msp/admincerts
+#       对于peer节点：/opt/gopath/src/github.com/hyperledger/fabric/peer/msp/admincerts
+function copyAdminCert {
+
+    if [ $# -ne 1 ]; then
+        fatal "Usage: copyAdminCert <TARGET_MSP_DIR>"
+    fi
+
+    if $ADMINCERTS; then
+        targetAdminDir=$1/admincerts
+        mkdir -p $targetAdminDir
+        # ORG_ADMIN_CERT=/${DATA}/orgs/${ORG}/msp/admincerts/cert.pem
+        # targetAdminDir：
+        #       对于orderer节点：/etc/hyperledger/orderer/msp/admincerts
+        #       对于peer节点：/opt/gopath/src/github.com/hyperledger/fabric/peer/msp/admincerts
+        dowait "$ORG administator to enroll" 60 $SETUP_LOGFILE $ORG_ADMIN_CERT
+        cp $ORG_ADMIN_CERT $targetAdminDir
+    fi
+}
+
 # 获取组织管理员身份证书。如果存在，则不再登记，否则登记组织管理员身份
-#   1. 保存登记时生成的身份证书至/${DATA}/orgs/${ORG}/admin目录下；
+#   1. 保存登记时生成的身份证书至<LOCAL_ADMIN_DIR>目录下；
 #       会在该目录下生成fabric-ca-client-config.yaml文件以及创建msp目录存放身份证书文件
-#   2. 将/${DATA}/orgs/${ORG}/admin/msp/signcerts/下的证书拷贝为/${DATA}/orgs/${ORG}/msp/admincerts/cert.pem
-#   3. 将/${DATA}/orgs/${ORG}/admin/msp/signcerts/下的证书拷贝为/${DATA}/orgs/${ORG}/admin/msp/admincerts/cert.pem
+#   2. 将<LOCAL_ADMIN_DIR>/msp/signcerts/cert.pem证书拷贝为<LOCAL_MSP_DIR>/admincerts/cert.pem
+#   3. 将<LOCAL_ADMIN_DIR>/msp/signcerts/cert.pem证书拷贝为<LOCAL_ADMIN_DIR>/msp/admincerts/cert.pem
 function getAdminCert {
 
+    if [ $# -ne 2 ]; then
+        echo "Usage: getAdminCert <LOCAL_ADMIN_DIR> <LOCAL_MSP_DIR>: $*"
+        exit 1
+    fi
+
+    LOCAL_ADMIN_DIR=$1
+    LOCAL_MSP_DIR=$2
+
     # 如果之前没有登记，则登记
-    if [ ! -d $ORG_ADMIN_HOME ]; then # /${DATA}/orgs/${ORG}/admin
+    if [ ! -d $LOCAL_ADMIN_DIR ]; then
+
         # 等待将CA服务端初始化生成的根证书拷贝为CA_CHAINFILE文件
         # 即校验本地CA_CHAINFILE证书文件是否存在
         dowait "$CA_NAME to start" 60 $CA_LOGFILE $CA_CHAINFILE
@@ -407,7 +453,7 @@ function getAdminCert {
         # fabric-ca-client主配置目录
         # fabric-ca-client会在该目录下搜索配置文件，
         # 同样，也会在该目录下生成fabric-ca-client-config.yaml文件以及创建msp目录存放身份证书文件
-        export FABRIC_CA_CLIENT_HOME=$ORG_ADMIN_HOME
+        export FABRIC_CA_CLIENT_HOME=$LOCAL_ADMIN_DIR
 
         # 而对于orderer、peer节点，在其docker-compose.yaml中的service.xxx.environment中已经定义FABRIC_CA_CLIENT_TLS_CERTFILES环境变量
         export FABRIC_CA_CLIENT_TLS_CERTFILES=$CA_CHAINFILE
@@ -415,16 +461,18 @@ function getAdminCert {
         # 登记组织管理员身份
         fabric-ca-client enroll -d -u https://$ADMIN_NAME:$ADMIN_PASS@$CA_HOST:7054
 
-        # 将 /${DATA}/orgs/$ORG/admin/msp/signcerts/ 下的证书拷贝为:
-        #       /${DATA}/orgs/${ORG}/msp/admincerts/cert.pem
-        #       /${DATA}/orgs/$ORG/admin/msp/admincerts/cert.pem
+        # 将 <LOCAL_ADMIN_DIR>/msp/signcerts/ 下的证书拷贝为:
+        #       <LOCAL_MSP_DIR>/admincerts/cert.pem
+        #       <LOCAL_ADMIN_DIR>/msp/admincerts/cert.pem
         if [ $ADMINCERTS ]; then
-            mkdir -p $(dirname "${ORG_ADMIN_CERT}")
-            # 2.2 将/${DATA}/orgs/${ORG}/admin/msp/signcerts/下的证书拷贝为/${DATA}/orgs/${ORG}/msp/admincerts/cert.pem
-            cp $ORG_ADMIN_HOME/msp/signcerts/* $ORG_ADMIN_CERT
-            # 2.3 将/${DATA}/orgs/${ORG}/admin/msp/signcerts/下的证书拷贝为/${DATA}/orgs/${ORG}/admin/msp/admincerts/cert.pem
-            mkdir $ORG_ADMIN_HOME/msp/admincerts
-            cp $ORG_ADMIN_HOME/msp/signcerts/* $ORG_ADMIN_HOME/msp/admincerts
+
+            mkdir -p $LOCAL_MSP_DIR/admincerts # <LOCAL_MSP_DIR>/admincerts
+
+            # 2.2 将<LOCAL_ADMIN_DIR>/msp/signcerts/下的证书拷贝为<LOCAL_MSP_DIR>/admincerts/cert.pem
+            cp $LOCAL_ADMIN_DIR/msp/signcerts/* $LOCAL_MSP_DIR/admincerts/cert.pem
+            # 2.3 将<LOCAL_ADMIN_DIR>/msp/signcerts/下的证书拷贝为<LOCAL_ADMIN_DIR>/msp/admincerts/cert.pem
+            mkdir $LOCAL_ADMIN_DIR/msp/admincerts
+            cp $LOCAL_ADMIN_DIR/msp/signcerts/* $LOCAL_ADMIN_DIR/msp/admincerts
         fi
     fi
 }
@@ -455,60 +503,38 @@ function getUserCert {
     fi
 }
 
-# 当启用ADMINCERTS时，将组织的管理员证书拷贝到dstDir目录
-# dstDir：
-#       对于orderer节点：/etc/hyperledger/orderer/msp/admincerts
-#       对于peer节点：/opt/gopath/src/github.com/hyperledger/fabric/peer/msp/admincerts
-function copyAdminCert {
-
-    if [ $# -ne 1 ]; then
-        fatal "Usage: copyAdminCert <target_msp_dir>"
-    fi
-
-    if $ADMINCERTS; then
-        dstDir=$1/admincerts
-        mkdir -p $dstDir
-        # ORG_ADMIN_CERT=/${DATA}/orgs/${ORG}/msp/admincerts/cert.pem
-        # dstDir：
-        #       对于orderer节点：/etc/hyperledger/orderer/msp/admincerts
-        #       对于peer节点：/opt/gopath/src/github.com/hyperledger/fabric/peer/msp/admincerts
-        dowait "$ORG administator to enroll" 60 $SETUP_LOGFILE $ORG_ADMIN_CERT
-        cp $ORG_ADMIN_CERT $dstDir
-    fi
-}
-
-# 为所有组织向CA服务端申请根证书，并保存到/${DATA}/orgs/${ORG}/msp
+# 为指定组织向CA服务端申请根证书，并保存到/${DATA}/orgs/${ORG}/msp
 # 如果ADMINCERTS为true，我们需要登记组织管理员并将证书保存到/${DATA}/orgs/${ORG}/msp/admincerts
 function getCACerts {
 
     log "Getting CA certificates ..."
 
-    for ORG in $ORGS; do
+    ORG=$1
 
-        initOrgVars $ORG
+    initOrgVars $ORG
 
-        log "Getting CA certs for organization $ORG and storing in $ORG_MSP_DIR"
+    log "Getting CA certs for organization $ORG and storing in $ORG_MSP_DIR"
 
-        # 对于orderer、peer节点，在其docker-compose.yaml中的service.xxx.environment中已经定义FABRIC_CA_CLIENT_TLS_CERTFILES环境变量
-        export FABRIC_CA_CLIENT_TLS_CERTFILES=$CA_CHAINFILE
+    # 对于orderer、peer节点，在其docker-compose.yaml中的service.xxx.environment中已经定义FABRIC_CA_CLIENT_TLS_CERTFILES环境变量
+    export FABRIC_CA_CLIENT_TLS_CERTFILES=$CA_CHAINFILE
 
-        # 向CA服务端申请根证书，并保存到/${DATA}/orgs/${ORG}/msp目录下的/cacerts 与 /intermediatecerts文件夹下
-        # ORG_MSP_DIR=/${DATA}/orgs/${ORG}/msp
-        fabric-ca-client getcacert -d -u https://$CA_HOST:7054 -M $ORG_MSP_DIR
+    # 向CA服务端申请根证书，并保存到/${DATA}/orgs/${ORG}/msp目录下的/cacerts 与 /intermediatecerts文件夹下
+    # ORG_MSP_DIR=/${DATA}/orgs/${ORG}/msp
+    fabric-ca-client getcacert -d -u https://$CA_HOST:7054 -M $ORG_MSP_DIR
 
-        # 如果msp目录下的tls相关证书目录不存在的话，则创建它们。
-        #   1. 创建msp/tlscacerts目录并将msp/cacerts目录下的证书拷贝到其下
-        #   2. 创建msp/tlsintermediatecerts目录并将msp/intermediatecerts目录下的证书拷贝到其下
-        finishMSPSetup $ORG_MSP_DIR
+    # 如果msp目录下的tls相关证书目录不存在的话，则创建它们。
+    #   1. 创建msp/tlscacerts目录并将msp/cacerts目录下的证书拷贝到其下
+    #   2. 创建msp/tlsintermediatecerts目录并将msp/intermediatecerts目录下的证书拷贝到其下
+    finishMSPSetup $ORG_MSP_DIR
 
-        # 如果ADMINCERTS为true，我们需要登记组织管理员并将证书保存到msp目录下的admincerts文件夹下
-        if [ $ADMINCERTS ]; then
-            getAdminCert
-        fi
-    done
+    # 如果ADMINCERTS为true，我们需要登记组织管理员并将证书保存到msp目录下的admincerts文件夹下
+    if [ $ADMINCERTS ]; then
+        getAdminCert $ORG_ADMIN_HOME $ORG_MSP_DIR
+    fi
 }
 
-function getClientTLSCert {
+# 调用之前，请务必确保设置了FABRIC_CA_CLIENT_TLS_CERTFILES、FABRIC_CA_CLIENT_HOME
+function getTLSCertKey {
 
     if [ $# -ne 3 ]; then
         echo "Usage: getClientTLSCert <host_name> <cert_file> <key_file>: $*"
@@ -521,93 +547,23 @@ function getClientTLSCert {
 
     fabric-ca-client enroll -d --enrollment.profile tls -u $ENROLLMENT_URL -M /tmp/tls --csr.hosts $HOST_NAME
 
-    mkdir /$DATA/tls || true
+    TLS_CERT_DIR=$(dirname "$CERT_FILE")
+    TLS_KEY_DIR=$(dirname "$KEY_FILE")
+    mkdir -p $TLS_CERT_DIR || true
+    mkdir -p $TLS_KEY_DIR || true
+
     cp /tmp/tls/signcerts/* $CERT_FILE
     cp /tmp/tls/keystore/* $KEY_FILE
     rm -rf /tmp/tls
 }
 
-# 从远程Peer获取客户端验证TLS证书
-function fetchClientTLSCert {
-
-    if [ $# -ne 3 ]; then
-        echo "Usage: fetchClientTLSCert <org> <num> <client_cert_file>: $*"
-        exit 1
-    fi
-
-    local ORG=$1
-    local NUM=$2
-    local TLS_CLIENTCERT_FILE=$3
-
-    # 获取指定Peer的连接属性
-    PEER_USER_NAME=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.PEERS['"$((NUM-1))"'].USER_NAME')
-    PEER_IP=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.PEERS['"$((NUM-1))"'].IP')
-    PEER_PATH=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.PEERS['"$((NUM-1))"'].PATH')
-    PEER_PWD=$(cat fabric.config | jq -r '.NET_CONFIG.'"${ORG}"'.PEERS['"$((NUM-1))"'].PWD')
-
-    # 判断是否可访问Peer服务
-    waitPort "access Peer < ip: $PEER_HOST > via port 22" 90 "" $PEER_HOST 22
-
-    set +e
-
-    local TLS_CLIENTCERT_REMOTE_FILE="${PEER_PATH}${TLS_CLIENTCERT_FILE}"
-    echo "    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑"
-    echo "    　 To: Peer服务器 < ip: ${PEER_IP}, username: ${PEER_USER_NAME} >"
-    echo
-    echo "    　 -> 检查Peer客户端验证TLS证书 < ${TLS_CLIENTCERT_REMOTE_FILE} > 是否可用..."
-    echo
-    echo "    　 * 温馨提示：你可以配置ssh免登陆哦！~"
-    echo "    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
-
-#    ssh ${PEER_USER_NAME}@${PEER_IP} "[ -f ${TLS_CLIENTCERT_REMOTE_FILE} ]"
-#    if [ $? -ne 0 ]; then
-#        fatal "Remote Peer client tls certificate not found"
-#    fi
-    ${SDIR}/scripts/file_exits.sh ${PEER_USER_NAME} ${PEER_IP} ${PEER_PWD} ${TLS_CLIENTCERT_REMOTE_FILE} >& ssh.log
-    local rs=$?
-    if [ $rs -eq 1 ]; then
-        fatal "Remote Peer client tls certificate not found"
-    elif [ $rs -eq 2 ]; then
-        fatal "Password is wrong!~"
-    elif [ $rs -ne 0 ]; then
-        fatal "Unknow error!~"
-    fi
-
-    local TLS_CLIENTCERT_LOCAL_PATH=$(dirname "$PWD${TLS_CLIENTCERT_FILE}")
-    if [ ! -d ${TLS_CLIENTCERT_LOCAL_PATH} ]; then
-        mkdir -p ${TLS_CLIENTCERT_LOCAL_PATH}
-    fi
-
-    cat << EOF
-    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
-    　 -> 拉取Peer客户端验证TLS证书...
-    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-EOF
-
-#    scp ${PEER_USER_NAME}@${PEER_IP}:${TLS_CLIENTCERT_REMOTE_FILE} "$PWD${TLS_CLIENTCERT_FILE}"
-#    if [ $? -ne 0 ]; then
-#       fatal "Failed to copy client tls certificate from remote Peer"
-#    fi
-    ${SDIR}/scripts/file_scp.sh ${PEER_USER_NAME} ${PEER_IP} ${PEER_PWD} ${TLS_CLIENTCERT_REMOTE_FILE} "$PWD${TLS_CLIENTCERT_FILE}" "from" >& ssh.log
-    rs=$?
-    if [ $rs -eq 1 ]; then
-        fatal "Failed to copy client tls certificate from remote Peer. exits?"
-    elif [ $rs -eq 2 ]; then
-        fatal "Password is wrong!~"
-    elif [ $rs -ne 0 ]; then
-        fatal "Unknow error!~"
-    fi
-
-    log "Copy the client tls certificate from the remote Peer successfully and store it as ${TLS_CLIENTCERT_FILE}"
-
-    set -e
-}
-
 # 从远程CA服务端获取CA_CHAINFILE
+# Usage: fetchCAChain <ORG> <CA_CHAINFILE> [IS_ROOT_CA_CERTFILE]
+# 注意：传入的<CA_CHAINFILE>以'/'开头
 function fetchCAChain {
 
     if [ $# -lt 2 ]; then
-        echo "Usage: fetchCAChain <org> <ca_chainfile> [<is_root_ca_certfile>]: $*"
+        echo "Usage: fetchCAChain <ORG> <CA_CHAINFILE> [IS_ROOT_CA_CERTFILE]: $*"
         exit 1
     fi
 
@@ -634,19 +590,17 @@ function fetchCAChain {
 
     set +e
 
-    local CACHAIN_REMOTE_FILE="${CA_PATH}${CA_CHAINFILE}"
+    local remoteCAChain="${CA_PATH}${CA_CHAINFILE}" # 远程CA服务端的CA_CHAINFILE文件路径
+
     echo "    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑"
     echo "    　 To: CA服务器 < ip: ${CA_IP}, username: ${CA_USER_NAME} >"
     echo
-    echo "    　 -> 检查CA根证书 < ${CACHAIN_REMOTE_FILE} > 是否可用..."
+    echo "    　 -> 检查CA根证书 < ${remoteCAChain} > 是否可用..."
     echo
     echo "    　 * 温馨提示：你可以配置ssh免登陆哦！~"
     echo "    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
-#    ssh ${CA_USER_NAME}@${CA_IP} "[ -f ${CACHAIN_REMOTE_FILE} ]"
-#    if [ $? -ne 0 ]; then
-#        fatal "Remote CA certificate not found"
-#    fi
-    ${SDIR}/scripts/file_exits.sh ${CA_USER_NAME} ${CA_IP} ${CA_PWD} ${CACHAIN_REMOTE_FILE} >& ssh.log
+
+    ${SDIR}/scripts/file_exits.sh ${CA_USER_NAME} ${CA_IP} ${CA_PWD} ${remoteCAChain} >& ssh.log
     local rs=$?
     if [ $rs -eq 1 ]; then
         fatal "Remote CA certificate not found"
@@ -656,9 +610,9 @@ function fetchCAChain {
         fatal "Unknow error!~"
     fi
 
-    local CACHAIN_LOCAL_PATH=$(dirname "$PWD${CA_CHAINFILE}")
-    if [ ! -d ${CACHAIN_LOCAL_PATH} ]; then
-        mkdir -p ${CACHAIN_LOCAL_PATH}
+    local localCAChainPath=$(dirname "${SDIR}${CA_CHAINFILE}") # CA_CHAINFILE文件保存本地的路径
+    if [ ! -d ${localCAChainPath} ]; then
+        mkdir -p ${localCAChainPath}
     fi
 
     cat << EOF
@@ -667,11 +621,7 @@ function fetchCAChain {
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 EOF
 
-#    scp ${CA_USER_NAME}@${CA_IP}:${CACHAIN_REMOTE_FILE} "$PWD${CA_CHAINFILE}"
-#    if [ $? -ne 0 ]; then
-#        fatal "Failed to copy certificate from remote CA"
-#    fi
-    ${SDIR}/scripts/file_scp.sh ${CA_USER_NAME} ${CA_IP} ${CA_PWD} ${CACHAIN_REMOTE_FILE} "$PWD${CA_CHAINFILE}" "from" >& ssh.log
+    ${SDIR}/scripts/file_scp.sh ${CA_USER_NAME} ${CA_IP} ${CA_PWD} ${remoteCAChain} "${SDIR}${CA_CHAINFILE}" "from" >& ssh.log
     rs=$?
     if [ $rs -eq 1 ]; then
         fatal "Failed to copy certificate from remote CA. exits?"
@@ -686,11 +636,78 @@ EOF
     set -e
 }
 
+# 从'setup'节点获取指定组织的Admin
+function fetchOrgAdmin {
+
+    if [ $# -ne 1 ]; then
+        echo "Usage: fetchOrgAdmin <ORG>"
+        exit 1
+    fi
+
+    local ORG=$1
+
+    initOrgVars $ORG
+
+    # 获取'setup'节点的连接属性
+    SETUP_USER_NAME=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.USER_NAME')
+    SETUP_IP=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.IP')
+    SETUP_PATH=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.PATH')
+    SETUP_PWD=$(cat fabric.config | jq -r '.NET_CONFIG.SETUP.PWD')
+
+    # 判断是否可访问'setup'节点
+    waitPort "access 'setup' < ip: $SETUP_IP > via port 22" 90 "" $SETUP_IP 22
+
+    set +e
+    local remoteOrgMsp="${SETUP_PATH}"$(dirname "$ORG_ADMIN_HOME")
+    echo "    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑"
+    echo "    　 To: \'setup\'服务器 < ip: ${SETUP_IP}, username: ${SETUP_USER_NAME} >"
+    echo
+    echo "    　 -> 检查组织MSP < ${remoteOrgMsp} > 是否可用..."
+    echo
+    echo "    　 * 温馨提示：你可以配置ssh免登陆哦！~"
+    echo "    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+
+    ${SDIR}/scripts/file_exits.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteOrgMsp} >& ssh.log
+    local rs=$?
+    if [ $rs -eq 1 ]; then
+        fatal "Remote ${ORG} MSP not found"
+    elif [ $rs -eq 2 ]; then
+        fatal "Password is wrong!~"
+    elif [ $rs -ne 0 ]; then
+        fatal "Unknow error!~"
+    fi
+
+    local localOrgMsp=${SDIR}$(dirname "$ORG_ADMIN_HOME")
+    local localOrgMspPath=$(dirname $localOrgMsp)
+    if [ ! -d ${localOrgMspPath} ]; then
+        mkdir -p ${localOrgMspPath}
+    fi
+
+    cat << EOF
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
+    　 -> 拉取组织MSP...
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+EOF
+
+    ${SDIR}/scripts/file_scp.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteOrgMsp} $localOrgMsp "from" >& ssh.log
+    rs=$?
+    if [ $rs -eq 1 ]; then
+        fatal "Failed to copy MSP from remote 'setup'. exits?"
+    elif [ $rs -eq 2 ]; then
+        fatal "Password is wrong!~"
+    elif [ $rs -ne 0 ]; then
+        fatal "Unknow error!~"
+    fi
+
+    log "Copy the MSP from the remote 'setup' successfully and store it as "$localOrgMsp
+    set -e
+}
+
 # 从'setup'节点获取指定组织的MSP
 function fetchOrgMSP {
 
     if [ $# -ne 1 ]; then
-        echo "Usage: fetchOrgMSP <org>"
+        echo "Usage: fetchOrgMSP <ORG>"
         exit 1
     fi
 
@@ -716,10 +733,7 @@ function fetchOrgMSP {
     echo
     echo "    　 * 温馨提示：你可以配置ssh免登陆哦！~"
     echo "    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
-#    ssh ${SETUP_USER_NAME}@${SETUP_IP} "[ -d ${remoteOrgMsp} ]"
-#    if [ $? -ne 0 ]; then
-#        fatal "Remote ${ORG} MSP not found"
-#    fi
+
     ${SDIR}/scripts/file_exits.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteOrgMsp} >& ssh.log
     local rs=$?
     if [ $rs -eq 1 ]; then
@@ -730,7 +744,7 @@ function fetchOrgMSP {
         fatal "Unknow error!~"
     fi
 
-    local localOrgMspPath=$(dirname ${PWD}$(dirname "$ORG_MSP_DIR"))
+    local localOrgMspPath=$(dirname ${SDIR}$(dirname "$ORG_MSP_DIR"))
     if [ ! -d ${localOrgMspPath} ]; then
         mkdir -p ${localOrgMspPath}
     fi
@@ -741,11 +755,7 @@ function fetchOrgMSP {
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 EOF
 
-#    scp -r ${SETUP_USER_NAME}@${SETUP_IP}:${remoteOrgMsp} ${PWD}$(dirname "$ORG_MSP_DIR")
-#    if [ $? -ne 0 ]; then
-#        fatal "Failed to copy MSP from remote 'setup'"
-#    fi
-    ${SDIR}/scripts/file_scp.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteOrgMsp} ${PWD}$(dirname "$ORG_MSP_DIR") "from" >& ssh.log
+    ${SDIR}/scripts/file_scp.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteOrgMsp} ${SDIR}$(dirname "$ORG_MSP_DIR") "from" >& ssh.log
     rs=$?
     if [ $rs -eq 1 ]; then
         fatal "Failed to copy MSP from remote 'setup'. exits?"
@@ -755,7 +765,7 @@ EOF
         fatal "Unknow error!~"
     fi
 
-    log "Copy the MSP from the remote 'setup' successfully and store it as "${PWD}$(dirname "$ORG_MSP_DIR")
+    log "Copy the MSP from the remote 'setup' successfully and store it as "${SDIR}$(dirname "$ORG_MSP_DIR")
     set -e
 }
 
@@ -787,10 +797,7 @@ function fetchChannelTx {
     echo
     echo "    　 * 温馨提示：你可以配置ssh免登陆哦！~"
     echo "    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
-#    ssh ${SETUP_USER_NAME}@${SETUP_IP} "[ -f ${remoteChannelTxFile} ]"
-#    if [ $? -ne 0 ]; then
-#        fatal "Remote channel configuration transaction not found"
-#    fi
+
     ${SDIR}/scripts/file_exits.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteChannelTxFile} >& ssh.log
     local rs=$?
     if [ $rs -eq 1 ]; then
@@ -812,10 +819,6 @@ function fetchChannelTx {
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 EOF
 
-#    scp ${SETUP_USER_NAME}@${SETUP_IP}:${remoteChannelTxFile} "$PWD${CHANNEL_TX_FILE}"
-#    if [ $? -ne 0 ]; then
-#        fatal "Failed to copy channel configuration transaction from remote 'setup'"
-#    fi
     ${SDIR}/scripts/file_scp.sh ${SETUP_USER_NAME} ${SETUP_IP} ${SETUP_PWD} ${remoteChannelTxFile} "$PWD${CHANNEL_TX_FILE}" "from" >& ssh.log
     rs=$?
     if [ $rs -eq 1 ]; then
@@ -830,8 +833,71 @@ EOF
     set -e
 }
 
+# fetchChannelConfig <ORDERER_ORG> <ORDERER_NUM> <CHANNEL_NAME> <OUTPUT_JSON>
+# 新组织未加入fabric应用通道，所以无权获取配置区块，这里使用的是第一个Peer组织的管理员身份来获取配置区块
+# 获取给定channel的配置区块，解码为json，并使用jq工具提取其中的完整的通道配置信息部分（.data.data[0].payload.data.config）保存到config.json文件中
+fetchChannelConfig() {
+
+    ORDERER_ORG=$1
+    ORDERER_NUM=$2
+    CHANNEL_NAME=$3
+    OUTPUT_JSON=$4
+
+    # 将 ORDERER_PORT_ARGS 设置为与$ORDERER_ORG的第$ORDERER_NUM个orderer节点进行通信所需的参数
+    initOrdererVars $ORDERER_ORG $ORDERER_NUM
+    # Orderer端点的连接属性
+    #       -o, --orderer string    Orderer服务地址
+    #       --tls    在与Orderer端点通信时使用TLS
+    #       --cafile string     Orderer节点的TLS证书，PEM格式编码，启用TLS时有效
+    #       --clientauth    是否启用客户端验证
+    #       --certfile string    Peer节点的PEM编码的X509公钥文件(代表peer节点身份)，用于客户端验证
+    #       --keyfile string    Peer节点的PEM编码的私钥文件(代表peer节点身份)，用于客户端验证
+    export ORDERER_PORT_ARGS="-o $ORDERER_HOST:7050 --tls --cafile $CA_CHAINFILE --clientauth"
+
+    # 使用第一个Peer组织的管理员身份来获取配置区块
+    IFS=', ' read -r -a PORGS <<< "$PEER_ORGS" # 将PEER_ORGS转换成PORGS数组变量
+    initPeerVars ${PORGS[0]} 1
+
+    # 获取第一个Peer组织的客户端认证tls证书和密钥，用于--clientauth
+    ENROLLMENT_URL=https://$PEER_NAME_PASS@$CA_HOST:7054
+    export FABRIC_CA_CLIENT_TLS_CERTFILES=$CA_CHAINFILE
+    getTLSCertKey $PEER_NAME $CORE_PEER_TLS_CLIENTCERT_FILE $CORE_PEER_TLS_CLIENTKEY_FILE
+
+    switchToAdminIdentity
+
+    # 获取指定channel的配置区块
+    echo "Fetching the most recent configuration block for the channel"
+
+    peer channel fetch config config_block.pb -c $CHANNEL_NAME $ORDERER_CONN_ARGS
+
+    echo "Decoding config block to JSON and isolating config to ${OUTPUT_JSON}"
+    configtxlator proto_decode --input config_block.pb --type common.Block | jq .data.data[0].payload.data.config > "${OUTPUT_JSON}"
+}
+
+# createConfigUpdate <channel_name> <original_config.json> <modified_config.json> <output.pb>
+# 使用原始的和修改的配置，来生成配置更新交易文件
+createConfigUpdate() {
+    CHANNEL_NAME=$1 # 应用通道名称
+    ORIGINAL_JSON=$2 # 原通道配置json文件
+    MODIFIED_JSON=$3 # 修改的通道配置json文件
+    OUTPUT_ENVELOPE=$4 # 最终输出的配置更新交易文件
+
+    # 将通道配置json文件编码生成类型为common.Config的配置文件
+    configtxlator proto_encode --input "${ORIGINAL_JSON}" --type common.Config > original_config.pb
+    configtxlator proto_encode --input "${MODIFIED_JSON}" --type common.Config > modified_config.pb
+
+    # 计算配置更新量，输出类型为common.ConfigUpdate的配置更新文件
+    configtxlator compute_update --channel_id "${CHANNEL_NAME}" --original original_config.pb --updated modified_config.pb > config_update.pb
+    # 将类型为common.ConfigUpdate的配置更新文件解码为json文件
+    configtxlator proto_decode --input config_update.pb  --type common.ConfigUpdate > config_update.json
+
+    # 将上述common.ConfigUpdate结构数据补全，编码生成类型为common.Envelope的配置更新交易文件
+    echo '{"payload":{"header":{"channel_header":{"channel_id":"'${CHANNEL_NAME}'", "type":2}},"data":{"config_update":'$(cat config_update.json)'}}}' | jq . > config_update_in_envelope.json
+    configtxlator proto_encode --input config_update_in_envelope.json --type common.Envelope > "${OUTPUT_ENVELOPE}"
+}
+
 # 等待进程开始监听特定的主机和端口
-# Usage: waitPort <what> <timeoutInSecs> <errorLogFile|doc> <host> <port>
+# Usage: waitPort <what> <timeoutInSecs> <errorLogFile> <host> <port>
 function waitPort {
 
     set +e
@@ -848,14 +914,14 @@ function waitPort {
 
     if [ $? -ne 0 ]; then
         log -n "Waiting for $what ..."
-        local starttime=$(date +%s)
+        local startTime=$(date +%s)
         while true; do
             sleep 1
             nc -z $host $port > /dev/null 2>&1
             if [ $? -eq 0 ]; then
                 break
             fi
-            if [ "$(($(date +%s)-starttime))" -gt "$secs" ]; then
+            if [ "$(($(date +%s)-startTime))" -gt "$secs" ]; then
                 echo ""
                 fatal "Failed waiting for $what; see $logFile"
             fi
@@ -867,11 +933,11 @@ function waitPort {
 }
 
 # 等待多个文件生成
-# Usage: dowait <what> <timeoutInSecs> <errorLogFile> <file> [<file> ...]
+# Usage: dowait <WHAT> <TIMEOUTINSECS> <ERRORLOGFILE> <FILE>...
 function dowait {
 
     if [ $# -lt 4 ]; then
-        fatal "Usage: dowait: $*"
+        fatal "Usage: dowait <WHAT> <TIMEOUTINSECS> <ERRORLOGFILE> <FILE>...: $*"
     fi
 
     local what=$1
@@ -880,7 +946,7 @@ function dowait {
     shift 3
 
     local logit=true
-    local starttime=$(date +%s)
+    local startTime=$(date +%s)
 
     for file in $*; do
         # 除非$file是一个文件，否则一直循环至超时退出
@@ -890,7 +956,7 @@ function dowait {
                 logit=false
             fi
             sleep 1
-            if [ "$(($(date +%s)-starttime))" -gt "$secs" ]; then
+            if [ "$(($(date +%s)-startTime))" -gt "$secs" ]; then
                 echo ""
                 fatal "Failed waiting for $what ($file not found); see $logFile"
             fi
@@ -915,6 +981,16 @@ function log {
 function fatal {
    log "FATAL: $*"
    exit 1 # 错误退出
+}
+
+function verifyResult {
+
+    if [ $1 -ne 0 ] ; then
+        echo "!!!!!!!!!!!!!!! "$2" !!!!!!!!!!!!!!!!"
+        echo "========= ERROR !!! FAILED  ==========="
+        echo
+        exit 1
+    fi
 }
 
 function installJQAuto {
@@ -964,4 +1040,222 @@ function installExpect {
     fi
 
     set -e
+}
+
+binariesDownload() {
+
+    echo "===> Downloading version ${FABRIC_TAG} platform specific fabric binaries"
+    binaryDownload ${BINARY_FILE} https://nexus.hyperledger.org/content/repositories/releases/org/hyperledger/fabric/hyperledger-fabric/${ARCH}-${VERSION}/${BINARY_FILE}
+
+    # 22 对应于 404
+    if [ $? -eq 22 ]; then
+        echo
+        echo "------> ${FABRIC_TAG} platform specific fabric binary is not available to download <----"
+        echo
+    fi
+
+    echo "===> Downloading version ${CA_TAG} platform specific fabric-ca-client binary"
+    binaryDownload ${CA_BINARY_FILE} https://nexus.hyperledger.org/content/repositories/releases/org/hyperledger/fabric-ca/hyperledger-fabric-ca/${ARCH}-${CA_VERSION}/${CA_BINARY_FILE}
+    if [ $? -eq 22 ]; then
+         echo
+         echo "------> ${CA_TAG} fabric-ca-client binary is not available to download  (Available from 1.1.0-rc1) <----"
+         echo
+    fi
+}
+
+# 这会尝试一次下载.tar.gz，但会在失败时调用binaryIncrementalDownload()函数，允许在网络出现故障时恢复。
+binaryDownload() {
+
+    local BINARY_FILE=$1 # 保存的文件名
+    # e.g
+    #   https://nexus.hyperledger.org/content/repositories/releases/org/hyperledger/fabric/hyperledger-fabric/linux-amd64-1.1.0/hyperledger-fabric-linux-amd64-1.1.0.tar.gz
+    #   https://nexus.hyperledger.org/content/repositories/releases/org/hyperledger/fabric-ca/hyperledger-fabric-ca/linux-amd64-1.1.0/hyperledger-fabric-ca-linux-amd64-1.1.0.tar.gz
+    local URL=$2 # 下载url
+
+    # 检查以前是否发生故障并且文件下载了一部分
+    if [ -e ${BINARY_FILE} ]; then
+        echo "==> Partial binary file found. Resuming download..."
+        binaryIncrementalDownload ${BINARY_FILE} ${URL}
+    else
+        curl ${URL} | tar xz || rc=$?
+        if [ ! -z "$rc" ]; then
+            echo "==> There was an error downloading the binary file. Switching to incremental download."
+            echo "==> Downloading file..."
+            binaryIncrementalDownload ${BINARY_FILE} ${URL}
+        else
+            echo "==> Done."
+        fi
+    fi
+}
+
+# 首先在本地增量下载.tar.gz文件，下载完成后才解压。这比binaryDownload()慢，但允许恢复下载。
+binaryIncrementalDownload() {
+
+    local BINARY_FILE=$1
+    local URL=$2
+
+    # Usage: curl [options...] <url>
+    #   Options: (H) means HTTP/HTTPS only, (F) means FTP only
+    #
+    #   -f, --fail      Fail silently (no output at all) on HTTP errors (H) 连接失败时不显示http错误
+    #   -s, --silent    Silent mode (don't output anything) 静默模式。不输出任何东西
+    #   -C, --continue-at OFFSET  Resumed transfer OFFSET 继续对该文件进行下载，已经下载过的文件不会被重新下载。偏移量是以字节为单位的整数，如果让curl自动推断出正确的续传位置使用 '-C -'。
+    curl -f -s -C - ${URL} -o ${BINARY_FILE} || rc=$?
+
+    # 由于目前的Nexus库限制：
+    # 当有一个没有更多字节下载的恢复尝试时，curl会返回33
+    # 完成恢复下载后，curl返回2
+    # 使用-f选项，404时curl返回22
+    if [ "$rc" = 22 ]; then
+        # looks like the requested file doesn't actually exist so stop here
+        return 22
+    fi
+    # 在本地增量下载.tar.gz文件成功：-z "$rc"
+    # 恢复下载完成：$rc -eq 33，$rc -eq 2
+    if [ -z "$rc" ] || [ $rc -eq 33 ] || [ $rc -eq 2 ]; then
+        # The checksum validates that RC 33 or 2 are not real failures
+        echo "==> File downloaded. Verifying the md5sum..."
+        localMd5sum=$(md5sum ${BINARY_FILE} | awk '{print $1}')
+        remoteMd5sum=$(curl -s ${URL}.md5)
+        if [ "$localMd5sum" == "$remoteMd5sum" ]; then
+            echo "==> Extracting ${BINARY_FILE}..."
+            tar xzf ./${BINARY_FILE} --overwrite
+            echo "==> Done."
+            rm -f ${BINARY_FILE} ${BINARY_FILE}.md5
+        else
+            echo "Download failed: the local md5sum is different from the remote md5sum. Please try again."
+            rm -f ${BINARY_FILE} ${BINARY_FILE}.md5
+            exit 1
+        fi
+    else
+        echo "Failure downloading binaries (curl RC=$rc). Please try again and the download will resume from where it stopped."
+        exit 1
+    fi
+}
+
+function binariesInstall {
+
+    local DOWN_REMOTE_BIN=$1
+    : ${DOWN_REMOTE_BIN:="false"}
+
+    if [ "$DOWN_REMOTE_BIN" == "true" ]; then # 下载构建通道Artifacts所需的二进制文件
+
+        echo
+        echo "Installing Hyperledger Fabric binaries . And get them from the remote."
+        echo
+
+        # 下载bin/下的configtxgen、configtxlator、cryptogen、orderer、peer二进制文件，以及config/下的configtx.yaml、core.yaml、orderer.yaml配置文件
+        binariesDownload
+
+        export PATH=${SDIR}/bin:$PATH
+
+    else # 基于fabric源码生成构建通道Artifacts所需的二进制文件
+        echo
+        echo "Installing Hyperledger Fabric binaries. And build them based on local source."
+        echo
+
+        if [ ! -d $FABRIC_ROOT ]; then
+            fatal "$FABRIC_ROOT not exits."
+        fi
+
+        # cryptogen 工具
+        make -C $FABRIC_ROOT release
+
+        export PATH=$FABRIC_ROOT/release/$ARCH/bin:$PATH
+    fi
+}
+
+# joinChannelWithRetry <ORG> <NUM>
+# 切换到peer组织的管理员身份，然后加入应用通道
+# 有时加入应用通道需要时间，因此至少重试5次
+function joinChannelWithRetry {
+
+    COUNTER=1
+    MAX_RETRY=5
+    DELAY=3
+
+	ORG=$1
+    PEER=$2
+
+    initPeerVars $ORG $PEER
+    switchToAdminIdentity
+
+    # step2.sh之前通过peer channel fetch会在cli当前工作目录下生成一个$CHANNEL_NAME.block区块，用于后续加入通道；
+    set +e
+    peer channel join -b $CHANNEL_NAME.block  >&log.txt
+	res=$?
+	cat log.txt
+    set -e
+	if [ $res -ne 0 -a $COUNTER -lt $MAX_RETRY ]; then
+        COUNTER=`expr $COUNTER + 1`
+        echo "${PEER_NAME} failed to join the channel, Retry after $DELAY seconds"
+        sleep $DELAY
+		joinChannelWithRetry $ORG $PEER
+    fi
+
+    verifyResult $res "After $MAX_RETRY attempts, ${PEER_NAME} has failed to Join the Channel"
+}
+
+# 切换到peer组织的管理员身份，然后安装链码
+function installChaincode {
+
+    CC_VERSION=$1
+
+    switchToAdminIdentity
+    log "Installing chaincode on $PEER_HOST ..."
+    peer chaincode install -n mycc -v $CC_VERSION -p github.com/hyperledger/fabric-web/chaincode/go/chaincode_example02
+}
+
+function chaincodeQuery {
+
+    if [ $# -ne 1 ]; then
+        fatal "Usage: chaincodeQuery <EXPECTED_VALUE>"
+    fi
+
+    set +e
+
+    log "Querying chaincode in the channel '$CHANNEL_NAME' on the peer '$PEER_HOST' ..."
+
+    local rc=1
+    local startTime=$(date +%s)
+
+    # Continue to poll until we get a successful response or reach QUERY_TIMEOUT
+    while test "$(($(date +%s)-startTime))" -lt "$QUERY_TIMEOUT"; do
+        sleep 1
+        peer chaincode query -C $CHANNEL_NAME -n mycc -c '{"Args":["query","a"]}' >& log.txt
+        VALUE=$(cat log.txt | awk '/Query Result/ {print $NF}')
+        if [ $? -eq 0 -a "$VALUE" = "$1" ]; then
+            log "Query of channel '$CHANNEL_NAME' on peer '$PEER_HOST' was successful"
+            set -e
+            return 0
+        fi
+        echo -n "."
+    done
+
+    cat log.txt
+    fatal "Failed to query channel '$CHANNEL_NAME' on peer '$PEER_HOST'; expected value was $1 and found $VALUE"
+}
+
+# 链码实例化策略/链码背书策略，新加入组织需要重新安装更新链码，否则新组织没有写权限
+function makePolicy {
+
+    # NAME=liucl
+    # echo "My Name is '${NAME}'" -> My Name is 'liucl'
+    # echo My Name is '${NAME}' -> My Name is ${NAME}
+
+    POLICY="OR("
+    local COUNT=0
+
+    for ORG in $PEER_ORGS; do
+        if [ $COUNT -ne 0 ]; then
+            POLICY="${POLICY}," # 拼接逗号
+        fi
+
+        initOrgVars $ORG
+        POLICY="${POLICY}'${ORG_MSP_ID}.member'"
+        COUNT=$((COUNT+1))
+    done
+
+    POLICY="${POLICY})"
+    log "policy: $POLICY"
 }

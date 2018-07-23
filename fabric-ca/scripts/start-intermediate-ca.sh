@@ -5,28 +5,14 @@
 # Apache-2.0
 #
 
-function finish {
-
-    if [ "$done" = true ]; then
-        log "See $INT_CA_LOGFILE for more details"
-        touch /$INT_CA_SUCCESS_FILE
-    else
-        log "Tests did not complete successfully; see $INT_CA_LOGFILE for more details"
-        touch /$INT_CA_FAIL_FILE
-    fi
-}
-
 set -e
 
 source $(dirname "$0")/env.sh
 
-done=false # 标记是否执行完成所有以下操作
-trap finish EXIT
-
 initOrgVars $ORG
 
 # 等待root CA启动
-# Usage: waitPort <what> <timeoutInSecs> <errorLogFile|doc> <host> <port>
+# Usage: waitPort <what> <timeoutInSecs> <errorLogFile> <host> <port>
 waitPort "root CA to start" 60 $ROOT_CA_LOGFILE $ROOT_CA_HOST 7054
 
 # 初始化中间层CA
@@ -52,5 +38,3 @@ sed -i "/affiliations:/a \\   $aff" \
 
 # Start the intermediate CA
 fabric-ca-server start
-
-done=true

@@ -70,7 +70,7 @@ expect {
         exit 0
     }
     "File Not Deleted" {
-        send_user "\n##### ${date} Please manually delete the remote ${remote_host} folder ${remote_file} \n"
+        send_user "\n##### ${date} ERROR !!!! Please manually delete the remote ${remote_host} folder ${remote_file} \n"
         exit 1
     }
 }

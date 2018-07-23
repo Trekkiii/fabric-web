@@ -6,11 +6,18 @@
 #
 # 启动peer
 
+function finish {
+
+    kill -9 $TAIL_PID
+}
+
+trap finish EXIT
+
 function printHelp {
 
 cat << EOF
     使用方法:
-        peer-bootstrap.sh [-h] [-?] <ORG> <NUM>
+        peer-bootstrap.sh [-h] <ORG> <NUM>
             -h|-?       获取此帮助信息
             <ORG>       启动的peer组织的名称
             <NUM>       启动的peer组织的节点索引
@@ -20,7 +27,7 @@ EOF
 
 set -e
 
-while getopts "h?" opt; do
+while getopts "h" opt; do
     case "$opt" in
         h|\?)
             printHelp
@@ -67,8 +74,12 @@ removeChaincode
 
 # 从远程CA服务端获取CAChain证书
 fetchCAChain $ORG $CA_CHAINFILE
-# 从'setup'节点获取组织的MSP
-fetchOrgMSP $ORG
+# 从'setup'节点获取组织的Admin证书
+
+# TODO !!! 注意：这里peer如果重新获取管理员身份证书，则会导致setup节点获取的管理员身份证书无效，从而run节点使用（执行peer channel join）时会报如下错误：
+# Error: proposal failed (err: rpc error: code = Unknown desc = chaincode error (status: 500, message: "JoinChain" request failed authorization check for channel [mychannel]:
+# [Failed verifying that proposal's creator satisfies local MSP principal during channelless check policy with policy [Admins]: [This identity is not an admin]]))
+fetchOrgAdmin $ORG
 
 # 创建docker-compose.yml文件
 ${SDIR}/makeDocker.sh
@@ -83,16 +94,8 @@ dowait "the docker 'peer' container to start" 60 ${SDIR}/${PEER_LOGFILE} ${SDIR}
 
 tail -f ${SDIR}/${PEER_LOGFILE}&
 TAIL_PID=$!
-sleep 5
 # 等待'peer'容器执行完成
-while true; do
-    if [ -f ${SDIR}/${PEER_SUCCESS_FILE} ]; then
-        kill -9 $TAIL_PID
-        exit 0
-    elif [ -f ${SDIR}/${PEER_FAIL_FILE} ]; then
-        kill -9 $TAIL_PID
-        exit 1
-    else
-        sleep 1
-    fi
-done
+# Usage: waitPort <what> <timeoutInSecs> <errorLogFile> <host> <port>
+waitPort "Peer $PEER_HOST to start" 1800 $PEER_LOGFILE $PEER_HOST 7051
+sleep 5
+exit 0

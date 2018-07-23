@@ -16,14 +16,15 @@ function printHelp {
 
 cat << EOF
     使用方法:
-        zk-kafka-bootstrap.sh <-z|-k> [-?] <ID>
+        zk-kafka-bootstrap.sh <-z|-k> <ID>
             -h|-?       获取此帮助信息
             -z          启动zookeeper节点
             -k          启动kafka节点
+            <ID>        节点的编号
 EOF
 }
 
-while getopts "h?zk" opt; do
+while getopts "hzk" opt; do
     case "$opt" in
         h|\?)
             printHelp

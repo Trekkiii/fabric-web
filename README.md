@@ -1,10 +1,26 @@
 # fabric-web
 
+## 版本历史
+ 
+### v1.1.1
+
+* 新增`expect`，免去手动输入密码的烦恼；
+
+### v1.1.2
+
+* 脚本自动分发到各个服务器
+* orderer增加kafka集群
+* 账本存储使用couchdb
+
+### v1.1.3
+
+* 支持动态新增组织
+
+## 使用步骤
+
 我们假定您已经配置好了go、docker环境，并设置了相关环境变量。
 
 如果没有，请参考：[>> 环境搭建](https://github.com/hutu92/fabric-samples-cn/blob/master/README.md)
-
-## 使用步骤
 
 请先使用如下命令为脚本增加执行权限：
 
@@ -205,22 +221,6 @@ root@vm10-249-0-4:~/fabric-web/fabric-ca# chmod +x scripts/eyfn/*.sh
  ### 十、动态增加节点
  
 [>> 动态增加节点](./EYFN.md)
- 
- ## 版本历史
- 
- ### v1.1.1
- 
- * 新增`expect`，免去手动输入密码的烦恼；
- 
- ### v1.1.2
- 
- * 脚本自动分发到各个服务器
- * orderer增加kafka集群
- * 账本存储使用couchdb
- 
- ### v1.1.3
- 
- * 支持动态新增组织
  
  ## TODO
  

@@ -94,7 +94,7 @@ function main {
         while [[ "$COUNT" -le $NUM_PEERS ]]; do
             initPeerVars $ORG $COUNT
             # 切换到peer组织的管理员身份，然后安装链码
-            installChaincode 1.0
+            installChaincode mycc 1.0 github.com/hyperledger/fabric-web/chaincode/go/chaincode_example02
             COUNT=$((COUNT+1))
         done
     done

@@ -1199,20 +1199,22 @@ function joinChannelWithRetry {
 # 切换到peer组织的管理员身份，然后安装链码
 function installChaincode {
 
-    CC_VERSION=$1
-    IS_VALID=$2
+    CC_NAME=$1 # 链码名称
+    CC_VERSION=$2 # 链码版本
+    CC_PATH=$3 # 链码路径
+    IS_VALID=$4
     : ${IS_VALID:="false"}
 
     switchToAdminIdentity
     log "Installing chaincode on $PEER_HOST ..."
-    peer chaincode install -n mycc -v $CC_VERSION -p github.com/hyperledger/fabric-web/chaincode/go/chaincode_example02 2>&1 | tee log.txt
+    peer chaincode install -n $CC_NAME -v $CC_VERSION -p $CC_PATH 2>&1 | tee log.txt
     res=$?
     if [ $res -ne 0 ]; then
         VALUE=$(cat log.txt | awk '/chaincode error/ {print $(NF-1)$NF}')
-        if [ $? -eq 0 -a "$VALUE" == "mycc.2.0exists" ]; then
-            log "chaincode 'mycc.2.0' is already install"
+        if [ $? -eq 0 -a "$VALUE" == "${CC_NAME}.${CC_VERSION}exists" ]; then
+            log "chaincode '${CC_NAME}.${CC_VERSION}' is already install"
         else
-            fatal "install of chaincode 'mycc.2.0' failed"
+            fatal "install of chaincode '${CC_NAME}.${CC_VERSION}' failed"
         fi
     fi
 }

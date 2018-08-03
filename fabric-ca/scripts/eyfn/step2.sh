@@ -70,7 +70,7 @@ echo "===================== $PEER_NAME joined the channel \"$CHANNEL_NAME\" ====
 
 initPeerVars ${NEW_ORG} ${PEER_NUM}
 echo "Installing chaincode 2.0 on ${PEER_HOST}..."
-installChaincode 2.0
+installChaincode mycc 2.0 github.com/hyperledger/fabric-web/chaincode/go/chaincode_example02
 
 IFS=', ' read -r -a PORGS <<< "$PEER_ORGS"
 NUM_PORGS=${#PORGS[@]}
@@ -81,7 +81,8 @@ for ORG in $PEER_ORGS; do
         initPeerVars $ORG $COUNT
         # 切换到peer组织的管理员身份，然后安装链码
         echo "Installing chaincode 2.0 on ${PEER_HOST}..."
-        installChaincode 2.0
+        installChaincode mycc 2.0 github.com/hyperledger/fabric-web/chaincode/go/chaincode_example02
+
     fi
     COUNT=$((COUNT+1))
 done
@@ -100,8 +101,8 @@ set +x
 set -e
 
 cat log.txt
-verifyResult $res "Chaincode upgrade on org${ORG} peer${PEER} has Failed"
-echo "===================== Chaincode is upgraded on org${ORG} peer${PEER} ===================== "
+verifyResult $res "Chaincode upgrade has Failed"
+echo "===================== Chaincode is upgraded ===================== "
 echo
 
 # 在新加入Peer组织的第一个peer节点上查询链码

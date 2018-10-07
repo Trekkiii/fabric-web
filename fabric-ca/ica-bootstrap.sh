@@ -84,6 +84,7 @@ dowait "the docker 'ica' container to start" 60 ${SDIR}/${INT_CA_LOGFILE} ${SDIR
 
 tail -f ${SDIR}/${INT_CA_LOGFILE}&
 TAIL_PID=$!
+sleep 5
 # 等待'ica'容器执行完成
 waitPort "$INT_CA_NAME to start" 90 $INT_CA_LOGFILE $INT_CA_HOST 7054
 sleep 5

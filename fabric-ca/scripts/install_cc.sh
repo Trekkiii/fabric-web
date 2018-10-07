@@ -32,15 +32,19 @@ done
 shift $opts
 
 if [ $# -lt 5 ]; then
-    echo "Usage: upgrade_cc.sh <-o <ORDERER_ORG>> <-n <ORDERER_NUM>> <CC_NAME> <CC_VERSION> <CC_PATH> <ORG> <NUM>"
+    echo "Usage: upgrade_cc.sh <-o <ORDERER_ORG>> <-n <ORDERER_NUM>> <ORG> <NUM> <CC_NAME> <CC_VERSION> <CC_PATH> [<CC_CTOR>]"
+    echo "Eg, ./install_cc.sh -u -o org0 -n 1 org1 1 mycc 1.1 github.com/hyperledger/fabric-web/chaincode/go/chaincode_example03 '{\"Args\":[\"init\",\"a\",\"90\",\"b\",\"210\"]}'"
     exit 1
 fi
 
-CC_NAME="$1" # 链码名称
-CC_VERSION="$2" # 链码版本
-CC_PATH="$3" # 链码路径
-PEER_ORG="$4" # Peer组织
-PEER_NUM="$5" # Peer节点索引
+PEER_ORG="$1" # Peer组织
+PEER_NUM="$2" # Peer节点索引
+CC_NAME="$3" # 链码名称
+CC_VERSION="$4" # 链码版本
+CC_PATH="$5" # 链码路径
+CC_CTOR="$6" # 链码的具体执行参数信息，json格式，默认为"{}"
+
+: ${CC_CTOR:="{}"}
 
 initOrdererVars $ORDERER_ORG $ORDERER_NUM
 export ORDERER_PORT_ARGS="-o $ORDERER_HOST:7050 --tls --cafile $CA_CHAINFILE --clientauth"
@@ -58,7 +62,7 @@ if $CC_UPGRADE; then
     set -x
     set +e
     makePolicy
-    peer chaincode upgrade -C $CHANNEL_NAME -n $CC_NAME -v $CC_VERSION -c '{"Args":["init","a","90","b","210"]}' -P "$POLICY" $ORDERER_CONN_ARGS  >&log.txt
+    peer chaincode upgrade -C $CHANNEL_NAME -n $CC_NAME -v $CC_VERSION -c $CC_CTOR -P "$POLICY" $ORDERER_CONN_ARGS  >&log.txt
     res=$?
     set +x
     set -e

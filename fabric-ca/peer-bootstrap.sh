@@ -94,6 +94,7 @@ dowait "the docker 'peer' container to start" 60 ${SDIR}/${PEER_LOGFILE} ${SDIR}
 
 tail -f ${SDIR}/${PEER_LOGFILE}&
 TAIL_PID=$!
+sleep 5
 # 等待'peer'容器执行完成
 # Usage: waitPort <what> <timeoutInSecs> <errorLogFile> <host> <port>
 waitPort "Peer $PEER_HOST to start" 1800 $PEER_LOGFILE $PEER_HOST 7051

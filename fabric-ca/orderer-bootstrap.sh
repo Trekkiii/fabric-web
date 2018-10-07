@@ -89,6 +89,7 @@ dowait "the docker 'orderer' container to start" 60 ${SDIR}/${ORDERER_LOGFILE} $
 
 tail -f ${SDIR}/${ORDERER_LOGFILE}&
 TAIL_PID=$!
+sleep 5
 # 等待'orderer'容器执行完成
 # Usage: waitPort <what> <timeoutInSecs> <errorLogFile> <host> <port>
 waitPort "Orderer $ORDERER_HOST to start" 90 $ORDERER_LOGFILE $ORDERER_HOST 7050

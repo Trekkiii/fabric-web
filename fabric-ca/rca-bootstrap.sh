@@ -73,6 +73,7 @@ dowait "the docker 'rca' container to start" 60 ${SDIR}/${ROOT_CA_LOGFILE} ${SDI
 
 tail -f ${SDIR}/${ROOT_CA_LOGFILE}&
 TAIL_PID=$!
+sleep 5
 # 等待'rca'容器执行完成
 waitPort "$ROOT_CA_NAME to start" 90 $ROOT_CA_LOGFILE $ROOT_CA_HOST 7054
 sleep 5
